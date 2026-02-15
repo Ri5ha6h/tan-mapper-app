@@ -51,20 +51,20 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
         onNodeRef?.(node.id, el)
     }
 
-    const TypeIcon = getTypeIcon(node.type)
+    const { icon: TypeIcon, colorClass: iconColor } = getTypeIcon(node.type)
 
     return (
         <div className="select-none">
             <div
                 ref={setRef}
                 className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-sm cursor-pointer",
-                    "hover:bg-muted/50 transition-colors",
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer",
+                    "hover:bg-muted/40 hover:scale-[1.01] transition-all duration-150",
                     isDragging && "opacity-50",
-                    isOver && "bg-primary/20 ring-2 ring-primary",
-                    isMapped && "bg-green-500/10",
+                    isOver && "bg-target/10 ring-2 ring-target/50 scale-[1.02]",
+                    isMapped && "bg-mapped/10 animate-mapped-glow",
                 )}
-                style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
+                style={{ paddingLeft: `${node.depth * 20 + 12}px` }}
                 {...(side === "source" ? { ...dragAttrs, ...dragListeners } : {})}
             >
                 {/* Expand/collapse chevron */}
@@ -75,11 +75,11 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
                             e.stopPropagation()
                             toggleExpand(node.id, side)
                         }}
-                        className="p-0.5 hover:bg-muted rounded"
+                        className="p-0.5 hover:bg-muted/50 rounded-full"
                     >
                         <ChevronRight
                             className={cn(
-                                "h-3.5 w-3.5 transition-transform",
+                                "h-3.5 w-3.5 transition-transform duration-200",
                                 isExpanded && "rotate-90",
                             )}
                         />
@@ -89,7 +89,7 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
                 )}
 
                 {/* Type icon */}
-                <TypeIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                <TypeIcon className={cn("h-4 w-4 shrink-0", iconColor)} />
 
                 {/* Key name */}
                 <span className="font-medium text-sm truncate">{node.key}</span>
@@ -102,12 +102,24 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
                 )}
             </div>
 
-            {/* Children */}
-            {hasChildren && isExpanded && (
-                <div>
-                    {node.children!.map((child) => (
-                        <TreeNode key={child.id} node={child} side={side} onNodeRef={onNodeRef} />
-                    ))}
+            {/* Children with CSS grid transition */}
+            {hasChildren && (
+                <div
+                    className="grid transition-[grid-template-rows] duration-200 ease-out"
+                    style={{
+                        gridTemplateRows: isExpanded ? "1fr" : "0fr",
+                    }}
+                >
+                    <div className="overflow-hidden">
+                        {node.children!.map((child) => (
+                            <TreeNode
+                                key={child.id}
+                                node={child}
+                                side={side}
+                                onNodeRef={onNodeRef}
+                            />
+                        ))}
+                    </div>
                 </div>
             )}
         </div>
@@ -118,15 +130,15 @@ function getTypeIcon(type: TreeNodeType["type"]) {
     switch (type) {
         case "object":
         case "xml-element":
-            return Folder
+            return { icon: Folder, colorClass: "text-secondary" }
         case "array":
-            return List
+            return { icon: List, colorClass: "text-accent" }
         case "primitive":
-            return FileText
+            return { icon: FileText, colorClass: "text-source" }
         case "xml-attribute":
-            return AtSign
+            return { icon: AtSign, colorClass: "text-chart-5" }
         default:
-            return Hash
+            return { icon: Hash, colorClass: "text-muted-foreground" }
     }
 }
 

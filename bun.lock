@@ -8,6 +8,7 @@
         "@base-ui/react": "^1.2.0",
         "@dnd-kit/core": "^6.3.1",
         "@fontsource-variable/geist-mono": "^5.2.7",
+        "@fontsource-variable/sora": "^5.2.8",
         "@monaco-editor/react": "^4.7.0",
         "@tailwindcss/vite": "^4.0.6",
         "@tanstack/react-devtools": "^0.7.0",
@@ -233,6 +234,8 @@
     "@floating-ui/utils": ["@floating-ui/utils@0.2.10", "", {}, "sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ=="],
 
     "@fontsource-variable/geist-mono": ["@fontsource-variable/geist-mono@5.2.7", "", {}, "sha512-ZKlZ5sjtalb2TwXKs400mAGDlt/+2ENLNySPx0wTz3bP3mWARCsUW+rpxzZc7e05d2qGch70pItt3K4qttbIYA=="],
+
+    "@fontsource-variable/sora": ["@fontsource-variable/sora@5.2.8", "", {}, "sha512-sP+ILTfi5r3cqmMBntI4ooQNxFI+LyHyD5hcPbWwwL4uh4kKFAkOz0w2veCXjz18fKRdva6OG0dY+5yQ02f30w=="],
 
     "@hono/node-server": ["@hono/node-server@1.19.9", "", { "peerDependencies": { "hono": "^4" } }, "sha512-vHL6w3ecZsky+8P5MD+eFfaGTyCeOHUIFYMGpQGbrBTSmNNoxv0if69rEZ5giu36weC5saFuznL411gRX7bJDw=="],
 

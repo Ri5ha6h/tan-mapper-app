@@ -49,6 +49,7 @@ export function FileUpload({ side }: FileUploadProps) {
     }
 
     const FileIcon = fileData?.type === "xml" ? FileCode : FileJson
+    const colorClass = side === "source" ? "bg-source/10 text-source" : "bg-target/10 text-target"
 
     return (
         <div className="flex items-center gap-2">
@@ -62,21 +63,33 @@ export function FileUpload({ side }: FileUploadProps) {
 
             {fileData ? (
                 <>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md">
-                        <FileIcon className="h-4 w-4 text-muted-foreground" />
+                    <div
+                        className={`flex items-center gap-2 px-4 py-1.5 rounded-full ${colorClass}`}
+                    >
+                        <FileIcon className="h-4 w-4" />
                         <span className="text-sm font-medium truncate max-w-[150px]">
                             {fileData.name}
                         </span>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={handleClear} className="h-8 w-8">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleClear}
+                        className="h-8 w-8 rounded-full"
+                    >
                         <X className="h-4 w-4" />
                     </Button>
                 </>
             ) : (
-                <Button variant="outline" onClick={handleClick}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload {side === "source" ? "Source" : "Target"}
-                </Button>
+                <button
+                    onClick={handleClick}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl border-2 border-dashed border-muted-foreground/25 text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-foreground transition-all cursor-pointer"
+                >
+                    <Upload className="h-4 w-4" />
+                    <span className="text-sm font-medium">
+                        Upload {side === "source" ? "Source" : "Target"}
+                    </span>
+                </button>
             )}
         </div>
     )

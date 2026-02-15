@@ -153,23 +153,33 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
             onClick={() => onOpenChange(false)}
         >
             <div
                 id="generate-modal-container"
-                className="bg-background border rounded-lg shadow-xl w-[90vw] h-[85vh] flex flex-col"
+                className="bg-glass-bg backdrop-blur-xl border border-glass-border rounded-2xl shadow-xl w-[90vw] h-[85vh] flex flex-col animate-modal-enter"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b">
-                    <h2 className="text-lg font-semibold">Generate Output</h2>
+                <div className="flex items-center justify-between px-5 py-4 border-b border-glass-border bg-muted/20 rounded-t-2xl">
+                    <h2 className="text-lg font-semibold tracking-tight">Generate Output</h2>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={handleCopy}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCopy}
+                            className="rounded-full"
+                        >
                             <Copy className="h-4 w-4 mr-1" />
                             Copy JSON
                         </Button>
-                        <Button variant="outline" size="sm" onClick={handleDownload}>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleDownload}
+                            className="rounded-full"
+                        >
                             <Download className="h-4 w-4 mr-1" />
                             Download JSON
                         </Button>
@@ -178,17 +188,22 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
                                 errors.length > 0 ? setShowErrorModal(true) : handleRun()
                             }
                             size="sm"
-                            className="relative"
+                            className="relative rounded-full"
                         >
                             <Play className="h-4 w-4 mr-1" />
                             Run
                             {errors.length > 0 && (
-                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                                <span className="absolute -top-1 -right-1 bg-destructive text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                                     {errors.length}
                                 </span>
                             )}
                         </Button>
-                        <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onOpenChange(false)}
+                            className="rounded-full"
+                        >
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
@@ -198,13 +213,14 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
                 <div className="flex-1 flex flex-col overflow-hidden" onMouseMove={handleMouseMove}>
                     {/* Script pane */}
                     <div style={{ height: `${topHeight}%` }} className="relative">
-                        <div className="absolute top-0 left-0 right-0 px-2 py-1 bg-muted/50 text-xs font-medium border-b">
+                        <div className="absolute top-0 left-0 right-0 px-3 py-1.5 bg-muted/30 border-b border-glass-border backdrop-blur-sm text-xs font-medium z-10">
                             Script
                         </div>
-                        <div className="pt-6 h-full">
+                        <div className="pt-7 h-full">
                             <Editor
                                 height="100%"
                                 language="plaintext"
+                                theme="vs-dark"
                                 value={script}
                                 onChange={(v) => setScript(v ?? "")}
                                 options={{
@@ -220,21 +236,25 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
 
                     {/* Horizontal divider */}
                     <div
-                        className="h-1 bg-border cursor-row-resize hover:bg-primary/50 transition-colors"
+                        className="h-1.5 bg-glass-border cursor-row-resize hover:bg-primary/50 transition-colors"
                         onMouseDown={() => setIsDraggingV(true)}
                     />
 
                     {/* Input/Output panes */}
                     <div style={{ height: `${100 - topHeight}%` }} className="flex">
                         {/* Input pane */}
-                        <div style={{ width: `${leftWidth}%` }} className="relative border-r">
-                            <div className="absolute top-0 left-0 right-0 px-2 py-1 bg-muted/50 text-xs font-medium border-b">
+                        <div
+                            style={{ width: `${leftWidth}%` }}
+                            className="relative border-r border-glass-border"
+                        >
+                            <div className="absolute top-0 left-0 right-0 px-3 py-1.5 bg-muted/30 border-b border-glass-border backdrop-blur-sm text-xs font-medium z-10">
                                 Input ({source?.type ?? "N/A"})
                             </div>
-                            <div className="pt-6 h-full">
+                            <div className="pt-7 h-full">
                                 <Editor
                                     height="100%"
                                     language={source?.type === "xml" ? "xml" : "json"}
+                                    theme="vs-dark"
                                     value={input}
                                     onChange={(v) => setInput(v ?? "")}
                                     options={{
@@ -250,29 +270,30 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
 
                         {/* Vertical divider */}
                         <div
-                            className="w-1 bg-border cursor-col-resize hover:bg-primary/50 transition-colors"
+                            className="w-1.5 bg-glass-border cursor-col-resize hover:bg-primary/50 transition-colors"
                             onMouseDown={() => setIsDraggingH(true)}
                         />
 
                         {/* Output pane */}
                         <div style={{ width: `${100 - leftWidth}%` }} className="relative">
-                            <div className="absolute top-0 left-0 right-0 px-2 py-1 bg-muted/50 text-xs font-medium border-b flex items-center justify-between">
+                            <div className="absolute top-0 left-0 right-0 px-3 py-1.5 bg-muted/30 border-b border-glass-border backdrop-blur-sm text-xs font-medium z-10 flex items-center justify-between">
                                 <span>Output ({target?.type ?? "N/A"})</span>
                                 <div className="flex gap-1">
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-5 w-5"
+                                        className="h-5 w-5 rounded-full"
                                         onClick={handleOutputCopy}
                                     >
                                         <Copy className="h-3 w-3" />
                                     </Button>
                                 </div>
                             </div>
-                            <div className="pt-6 h-full">
+                            <div className="pt-7 h-full">
                                 <Editor
                                     height="100%"
                                     language={target?.type === "xml" ? "xml" : "json"}
+                                    theme="vs-dark"
                                     value={output}
                                     options={{
                                         minimap: { enabled: false },
@@ -291,31 +312,29 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
             {/* Error Modal */}
             {showErrorModal && (
                 <div
-                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
+                    className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
                     onClick={() => setShowErrorModal(false)}
                 >
                     <div
-                        className="bg-background border rounded-lg shadow-xl w-[400px] max-w-[90vw] p-6"
+                        className="bg-glass-bg backdrop-blur-xl border border-glass-border rounded-2xl shadow-xl w-[400px] max-w-[90vw] p-6 animate-modal-enter"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-red-600">
+                            <h3 className="text-lg font-semibold text-destructive">
                                 Error{errors.length > 1 ? "s" : ""} Found
                             </h3>
                             <Button
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => setShowErrorModal(false)}
+                                className="rounded-full"
                             >
                                 <X className="h-4 w-4" />
                             </Button>
                         </div>
-                        <div className="bg-red-50 dark:bg-red-900/20 rounded-md p-3 max-h-60 overflow-auto">
+                        <div className="bg-destructive/10 rounded-xl p-4 max-h-60 overflow-auto">
                             {errors.map((err, i) => (
-                                <div
-                                    key={i}
-                                    className="text-sm text-red-600 dark:text-red-400 mb-1"
-                                >
+                                <div key={i} className="text-sm text-destructive mb-1">
                                     {err.line > 0 && (
                                         <span className="font-medium">Line {err.line}: </span>
                                     )}
@@ -324,7 +343,12 @@ export function GenerateModal({ open, onOpenChange }: GenerateModalProps) {
                             ))}
                         </div>
                         <div className="mt-4 flex justify-end">
-                            <Button onClick={() => setShowErrorModal(false)}>Close</Button>
+                            <Button
+                                onClick={() => setShowErrorModal(false)}
+                                className="rounded-full"
+                            >
+                                Close
+                            </Button>
                         </div>
                     </div>
                 </div>

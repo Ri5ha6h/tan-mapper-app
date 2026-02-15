@@ -107,9 +107,16 @@ export function ConnectionLines({ sourceRefs, targetRefs, containerRef }: Connec
         >
             <defs>
                 <linearGradient id="line-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="oklch(var(--primary))" />
-                    <stop offset="100%" stopColor="oklch(var(--primary))" />
+                    <stop offset="0%" stopColor="oklch(0.78 0.12 45)" />
+                    <stop offset="100%" stopColor="oklch(0.72 0.10 290)" />
                 </linearGradient>
+                <filter id="line-glow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+                    <feMerge>
+                        <feMergeNode in="blur" />
+                        <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                </filter>
             </defs>
 
             {lines.map((line) => {
@@ -124,7 +131,7 @@ export function ConnectionLines({ sourceRefs, targetRefs, containerRef }: Connec
                             d={path}
                             fill="none"
                             stroke="transparent"
-                            strokeWidth={12}
+                            strokeWidth={16}
                             className="pointer-events-auto cursor-pointer"
                             onClick={() => handleLineClick(line.id)}
                         />
@@ -134,11 +141,29 @@ export function ConnectionLines({ sourceRefs, targetRefs, containerRef }: Connec
                             fill="none"
                             stroke="url(#line-gradient)"
                             strokeWidth={2}
+                            strokeDasharray="6 4"
+                            filter="url(#line-glow)"
                             className="transition-all"
+                            style={{
+                                animation: "flow-dash 1s linear infinite",
+                            }}
                         />
-                        {/* Dots at endpoints */}
-                        <circle cx={line.x1} cy={line.y1} r={4} fill="oklch(var(--primary))" />
-                        <circle cx={line.x2} cy={line.y2} r={4} fill="oklch(var(--primary))" />
+                        {/* Source dot (peach) */}
+                        <circle
+                            cx={line.x1}
+                            cy={line.y1}
+                            r={4}
+                            fill="oklch(0.78 0.12 45)"
+                            style={{ animation: "dot-pulse 2s ease-in-out infinite" }}
+                        />
+                        {/* Target dot (lavender) */}
+                        <circle
+                            cx={line.x2}
+                            cy={line.y2}
+                            r={4}
+                            fill="oklch(0.72 0.10 290)"
+                            style={{ animation: "dot-pulse 2s ease-in-out infinite 0.5s" }}
+                        />
                     </g>
                 )
             })}
