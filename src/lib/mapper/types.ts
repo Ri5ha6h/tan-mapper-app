@@ -2,6 +2,7 @@ export interface TreeNode {
     id: string // path-based: "root.user.name"
     key: string // display: "name"
     value?: string // leaf value (primitives only)
+    rawValue?: unknown // original typed value (preserves number/boolean/null)
     type: "object" | "array" | "primitive" | "xml-element" | "xml-attribute"
     children?: Array<TreeNode>
     depth: number

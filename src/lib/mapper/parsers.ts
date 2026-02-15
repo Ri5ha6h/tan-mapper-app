@@ -25,6 +25,7 @@ function jsonToTree(value: unknown, key: string, path: string, depth: number): T
             id: path,
             key,
             value: String(value),
+            rawValue: value,
             type: "primitive",
             depth,
         }

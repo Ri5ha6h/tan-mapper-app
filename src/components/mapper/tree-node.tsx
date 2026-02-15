@@ -1,5 +1,5 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core"
-import { AtSign, ChevronRight, FileText, Folder, Hash, List } from "lucide-react"
+import { AtSign, ChevronRight, FileText, Folder, Hash, List, X } from "lucide-react"
 import type { DragData, TreeNode as TreeNodeType } from "@/lib/mapper/types"
 import { useMapper } from "@/lib/mapper/context"
 import { cn } from "@/lib/utils"
@@ -11,7 +11,7 @@ interface TreeNodeProps {
 }
 
 export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
-    const { isExpanded: checkExpanded, toggleExpand, mappings } = useMapper()
+    const { isExpanded: checkExpanded, toggleExpand, mappings, removeMappingsForNode } = useMapper()
     const isExpanded = checkExpanded(node.id, side)
     const hasChildren = node.children && node.children.length > 0
 
@@ -99,6 +99,20 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
                     <span className="text-xs text-muted-foreground truncate ml-1">
                         : {truncateValue(node.value)}
                     </span>
+                )}
+
+                {/* Unlink button (mapped nodes only) */}
+                {isMapped && (
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            removeMappingsForNode(node.id, side)
+                        }}
+                        className="ml-auto h-5 w-5 shrink-0 flex items-center justify-center rounded-full hover:bg-destructive/20 text-mapped transition-colors"
+                    >
+                        <X className="h-3 w-3" />
+                    </button>
                 )}
             </div>
 

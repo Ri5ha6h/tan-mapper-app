@@ -52,7 +52,7 @@ function buildTargetTemplate(node: TreeNode | null): unknown {
     if (!node) return {}
 
     if (node.type === "primitive" || node.type === "xml-attribute") {
-        return node.value ?? ""
+        return node.rawValue ?? node.value ?? ""
     }
 
     if (node.type === "array") {
@@ -70,12 +70,7 @@ function buildTargetTemplate(node: TreeNode | null): unknown {
         if (child.type === "xml-attribute") {
             Object.assign(result, childResult)
         } else if (child.type === "array") {
-            const arr = result[child.key]
-            if (Array.isArray(arr)) {
-                arr.push(childResult)
-            } else {
-                result[child.key] = [childResult]
-            }
+            result[child.key] = childResult
         } else {
             result[child.key] = childResult
         }

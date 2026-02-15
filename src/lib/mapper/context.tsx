@@ -17,6 +17,7 @@ type MapperAction =
     | { type: "SET_TARGET"; payload: FileData | null }
     | { type: "ADD_MAPPING"; payload: Mapping }
     | { type: "REMOVE_MAPPING"; payload: string }
+    | { type: "REMOVE_MAPPINGS_FOR_NODE"; payload: { nodeId: string; side: Side } }
     | { type: "SET_MAPPINGS"; payload: Array<Mapping> }
     | { type: "TOGGLE_EXPAND"; payload: { nodeId: string; side: Side } }
 
@@ -66,6 +67,16 @@ function mapperReducer(state: MapperState, action: MapperAction): MapperState {
                 mappings: state.mappings.filter((m) => m.id !== action.payload),
             }
 
+        case "REMOVE_MAPPINGS_FOR_NODE": {
+            const { nodeId, side } = action.payload
+            return {
+                ...state,
+                mappings: state.mappings.filter((m) =>
+                    side === "source" ? m.sourceId !== nodeId : m.targetId !== nodeId,
+                ),
+            }
+        }
+
         case "SET_MAPPINGS":
             return {
                 ...state,
@@ -93,6 +104,7 @@ interface MapperContextValue extends MapperState {
     setTarget: (data: FileData | null) => void
     addMapping: (sourceId: string, targetId: string) => void
     removeMapping: (id: string) => void
+    removeMappingsForNode: (nodeId: string, side: Side) => void
     setMappings: (mappings: Array<Mapping>) => void
     toggleExpand: (nodeId: string, side: Side) => void
     isExpanded: (nodeId: string, side: Side) => boolean
@@ -124,6 +136,10 @@ export function MapperProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "REMOVE_MAPPING", payload: id })
     }
 
+    const removeMappingsForNode = (nodeId: string, side: Side) => {
+        dispatch({ type: "REMOVE_MAPPINGS_FOR_NODE", payload: { nodeId, side } })
+    }
+
     const setMappings = (mappings: Array<Mapping>) => {
         dispatch({ type: "SET_MAPPINGS", payload: mappings })
     }
@@ -146,6 +162,7 @@ export function MapperProvider({ children }: { children: ReactNode }) {
                 setTarget,
                 addMapping,
                 removeMapping,
+                removeMappingsForNode,
                 setMappings,
                 toggleExpand,
                 isExpanded,
