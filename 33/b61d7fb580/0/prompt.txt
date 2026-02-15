@@ -1,0 +1,118 @@
+Implement the following plan:
+
+# Plan: Array Fix, Node-Level Mapping Clear, Test Suite
+
+## Context
+
+Three changes are needed:
+1. **Array representation bug** — The modal's Input pane (and by extension Output) shows double-nested arrays and loses primitive types. E.g., `products` becomes `[[{...}]]` instead of `[{...}]`, and numbers become strings.
+2. **Clear mapping on tree node level** — Currently mappings can only be removed from the mappings panel or by clicking connection lines. Users need a way to clear mappings directly from a tree node.
+3. **Test suite** — No tests exist. Add vitest tests using `BasicMapperTestingSamples/` as baseline data.
+
+---
+
+## 1. Fix Array Representation (double-nesting + type loss)
+
+### Root Cause Analysis
+
+**Double-nesting** — `engine.ts:buildTargetTemplate()` lines 72-78:
+When an object node has a child of type `"array"`, the recursive call on line 69 (`buildTargetTemplate(child)`) already returns a proper JS array (via lines 58-60). But then lines 77 wraps it again: `result[child.key] = [childResult]`, producing `[[...]]`.
+
+**Type loss** — `parsers.ts:jsonToTree()` line 27:
+All primitive values are converted to strings via `String(value)`. The `TreeNode.value` field is typed `string | undefined`. When `buildTargetTemplate` reconstructs the data, it returns `node.value ?? ""` — always a string.
+
+### Changes
+
+**File: `src/lib/mapper/types.ts`**
+- Add `rawValue?: unknown` to `TreeNode` interface to preserve original typed values.
+
+**File: `src/lib/mapper/parsers.ts`** (`jsonToTree`)
+- Store `rawValue: value` alongside `value: String(value)` for primitive nodes.
+
+**File: `src/lib/mapper/engine.ts`** (`buildTargetTemplate`)
+- Fix array child in object handler: assign `childResult` directly instead of wrapping in `[childResult]`:
+  ```
+  // Before:  result[child.key] = [childResult]
+  // After:   result[child.key] = childResult
+  ```
+- Fix primitive return: use `node.rawValue ?? node.value ?? ""` to preserve original types.
+
+---
+
+## 2. Clear Mapping on Tree Node Level
+
+### Approach
+
+Add a small always-visible X button on mapped tree nodes. Clicking it removes all mappings associated with that node.
+
+### Changes
+
+**File: `src/lib/mapper/context.tsx`**
+- Add `REMOVE_MAPPINGS_FOR_NODE` reducer action that filters out all mappings where `sourceId === nodeId` (if source side) or `targetId === nodeId` (if target side).
+- Add `removeMappingsForNode(nodeId: string, side: Side)` to context API.
+
+**File: `src/components/mapper/tree-node.tsx`**
+- Import `X` icon from lucide-react.
+- For mapped nodes, render a small X button at the end of the row.
+- On click, call `removeMappingsForNode(node.id, side)`.
+- Button styled as a subtle pill: `h-5 w-5 rounded-full hover:bg-destructive/20 text-mapped` visible only on mapped nodes.
+
+---
+
+## 3. Test Suite
+
+### Setup
+
+- Create `vitest.config.ts` at project root (separate from vite.config since TanStack Start plugins interfere with test runner). Configure with `viteTsConfigPaths` for `@/` alias resolution.
+
+### Test Files
+
+**File: `src/lib/mapper/__tests__/parsers.test.ts`**
+- Test `parseJSON` with all 6 sample inputs:
+  - Flat object (sample1) — correct keys, primitive types, rawValues preserved
+  - Nested object (sample2) — depth levels, child structure
+  - Array of objects (sample3) — array node type, children indexed as `[0]`, `[1]`
+  - Nested object with nested object (sample4) — deep nesting
+  - Nested source (sample5) — 2-level deep source
+  - Array with mixed types (sample6) — root-level array in output, arrays in source
+- Test `detectFileType` with JSON/XML inputs
+
+**File: `src/lib/mapper/__tests__/engine.test.ts`**
+- Test `treeToData` (tree → JSON reconstruction):
+  - Verify no double-nesting for arrays (sample3)
+  - Verify primitive types preserved (numbers stay numbers, strings stay strings)
+  - Round-trip: `parseJSON` → `treeToData` should produce structurally equivalent JSON
+- Test `applyMappings` with sample mapping scenarios
+- Test `getValueAtPath` / `setValueAtPath` edge cases (array indices, nested paths)
+- Test `generateJSONOutput` formatting
+
+**File: `src/lib/mapper/__tests__/dsl.test.ts`**
+- Test `parseDSL` with valid/invalid mapping strings
+- Test `generateDSL` round-trip with mappings
+
+---
+
+## Files to Modify
+
+| File | Change |
+|------|--------|
+| `src/lib/mapper/types.ts` | Add `rawValue?: unknown` |
+| `src/lib/mapper/parsers.ts` | Store `rawValue` in primitive nodes |
+| `src/lib/mapper/engine.ts` | Fix array double-nesting, use `rawValue` for primitives |
+| `src/lib/mapper/context.tsx` | Add `removeMappingsForNode` action + API |
+| `src/components/mapper/tree-node.tsx` | Add unlink button on mapped nodes |
+| `vitest.config.ts` (new) | Test runner config |
+| `src/lib/mapper/__tests__/parsers.test.ts` (new) | Parser tests |
+| `src/lib/mapper/__tests__/engine.test.ts` (new) | Engine tests |
+| `src/lib/mapper/__tests__/dsl.test.ts` (new) | DSL tests |
+
+## Verification
+
+1. `bun test` — all new tests pass
+2. Upload `sampleInput3.json` as source → open modal → Input pane should show `"products": [{...}, {...}]` (not double-nested) with numbers as numbers
+3. Create mappings → verify unlink button appears on mapped nodes → click to clear → mapping removed, connection line disappears
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.

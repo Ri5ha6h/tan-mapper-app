@@ -1,0 +1,49 @@
+{
+  "cli_version": "0.4.4",
+  "checkpoint_id": "33b61d7fb580",
+  "session_id": "ddb3caa0-2917-4e87-a8a1-cc529ac37f4f",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-15T14:10:15.10717Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "BasicMapperTestingSamples/sampleInput1.json",
+    "BasicMapperTestingSamples/sampleInput2.json",
+    "BasicMapperTestingSamples/sampleInput3.json",
+    "BasicMapperTestingSamples/sampleInput4.json",
+    "BasicMapperTestingSamples/sampleInput5.json",
+    "BasicMapperTestingSamples/sampleInput6.json",
+    "BasicMapperTestingSamples/sampleOutput1.json",
+    "BasicMapperTestingSamples/sampleOutput2.json",
+    "BasicMapperTestingSamples/sampleOutput3.json",
+    "BasicMapperTestingSamples/sampleOutput4.json",
+    "BasicMapperTestingSamples/sampleOutput5.json",
+    "BasicMapperTestingSamples/sampleOutput6.json",
+    "src/components/mapper/tree-node.tsx",
+    "src/lib/mapper/__tests__/dsl.test.ts",
+    "src/lib/mapper/__tests__/engine.test.ts",
+    "src/lib/mapper/__tests__/parsers.test.ts",
+    "src/lib/mapper/context.tsx",
+    "src/lib/mapper/engine.ts",
+    "src/lib/mapper/parsers.ts",
+    "src/lib/mapper/types.ts",
+    "vitest.config.ts"
+  ],
+  "agent": "Claude Code",
+  "token_usage": {
+    "input_tokens": 1004,
+    "cache_creation_tokens": 34262,
+    "cache_read_tokens": 983690,
+    "output_tokens": 265,
+    "api_call_count": 23
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-15T14:10:15.039529Z",
+    "agent_lines": 646,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 646,
+    "agent_percentage": 100
+  }
+}

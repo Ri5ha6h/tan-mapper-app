@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.4.4",
+  "checkpoint_id": "33b61d7fb580",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "BasicMapperTestingSamples/sampleInput1.json",
+    "BasicMapperTestingSamples/sampleInput2.json",
+    "BasicMapperTestingSamples/sampleInput3.json",
+    "BasicMapperTestingSamples/sampleInput4.json",
+    "BasicMapperTestingSamples/sampleInput5.json",
+    "BasicMapperTestingSamples/sampleInput6.json",
+    "BasicMapperTestingSamples/sampleOutput1.json",
+    "BasicMapperTestingSamples/sampleOutput2.json",
+    "BasicMapperTestingSamples/sampleOutput3.json",
+    "BasicMapperTestingSamples/sampleOutput4.json",
+    "BasicMapperTestingSamples/sampleOutput5.json",
+    "BasicMapperTestingSamples/sampleOutput6.json",
+    "src/components/mapper/tree-node.tsx",
+    "src/lib/mapper/__tests__/dsl.test.ts",
+    "src/lib/mapper/__tests__/engine.test.ts",
+    "src/lib/mapper/__tests__/parsers.test.ts",
+    "src/lib/mapper/context.tsx",
+    "src/lib/mapper/engine.ts",
+    "src/lib/mapper/parsers.ts",
+    "src/lib/mapper/types.ts",
+    "vitest.config.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/33/b61d7fb580/0/metadata.json",
+      "transcript": "/33/b61d7fb580/0/full.jsonl",
+      "context": "/33/b61d7fb580/0/context.md",
+      "content_hash": "/33/b61d7fb580/0/content_hash.txt",
+      "prompt": "/33/b61d7fb580/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 1004,
+    "cache_creation_tokens": 34262,
+    "cache_read_tokens": 983690,
+    "output_tokens": 265,
+    "api_call_count": 23
+  }
+}
