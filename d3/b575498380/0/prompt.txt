@@ -1,0 +1,337 @@
+Implement the following plan:
+
+# Plan: Context Menus, Node Management & Conditional DSL Mapping
+
+## Context
+
+The mapper app currently supports drag-and-drop mapping between source and target trees, with a simple DSL (`source.path -> target.path`). Three gaps need to be addressed:
+
+1. **No right-click interaction** — users can't add/edit/remove nodes or mappings via context menu
+2. **No conditional mapping** — every mapping always applies; users need to filter array elements (e.g., "only map products where price > 100") and apply transformations (e.g., "add 5% to cost if price > 40")
+3. **No node manipulation** — tree structure is read-only after file upload; users can't add new fields
+
+---
+
+## Feature 1: Right-Click Context Menus
+
+### 1A. Create `src/components/ui/context-menu.tsx`
+
+Build a ContextMenu component wrapping `@base-ui/react/context-menu` (confirmed available). Mirrors the pattern of the existing `dropdown-menu.tsx`:
+
+- `ContextMenu` → `ContextMenuPrimitive.Root`
+- `ContextMenuTrigger` → `ContextMenuPrimitive.Trigger` (handles right-click natively)
+- `ContextMenuContent` → `MenuPrimitive.Portal` + `MenuPrimitive.Positioner` + `MenuPrimitive.Popup` (reuses Menu subcomponents, same glass-morphism styling as dropdown-menu)
+- `ContextMenuItem`, `ContextMenuSub`, `ContextMenuSubTrigger`, `ContextMenuSubContent`, `ContextMenuSeparator`, `ContextMenuLabel`
+
+Styling: identical to `dropdown-menu.tsx` classes (`rounded-2xl`, `bg-popover`, `ring-foreground/5`, animation classes).
+
+### 1B. Modify `src/components/mapper/tree-node.tsx`
+
+Wrap each node row in `<ContextMenu>` + `<ContextMenuTrigger>`. The trigger wraps the pill-row `<div>`. No conflict with dnd-kit since ContextMenuTrigger intercepts `contextmenu` events while dnd-kit uses `pointerdown`/`pointermove`.
+
+**Target node context menu:**
+```
+Add Node ▸
+  ├─ Above ▸  [Normal | Array | Object]
+  ├─ Below ▸  [Normal | Array | Object]
+  └─ Inside ▸ [Normal | Array | Object]  ← only for object/array nodes
+─────────────
+Edit Mapping    ← only when this node is mapped
+─────────────
+Clear Mapping   ← only when this node is mapped (destructive variant)
+```
+
+**Source node context menu:**
+```
+Add Node ▸
+  ├─ Above ▸  [Normal | Array | Object]
+  ├─ Below ▸  [Normal | Array | Object]
+  └─ Inside ▸ [Normal | Array | Object]  ← only for object/array nodes
+─────────────
+Clear Mapping   ← only when this node is mapped (destructive variant)
+```
+
+Icons: `Plus` for Add Node, `Pencil` for Edit, `Trash2` for Clear. Submenu type items use existing type icons (`FileText`=Normal, `List`=Array, `Folder`=Object).
+
+---
+
+## Feature 2: Node Management
+
+### 2A. Add tree mutation to `src/lib/mapper/context.tsx`
+
+New reducer actions:
+
+```ts
+| { type: 'ADD_TREE_NODE'; payload: { siblingId: string; side: Side; position: 'above' | 'below' | 'inside'; newNode: TreeNode } }
+```
+
+- `above`/`below`: find the sibling's parent, insert before/after the sibling in `parent.children`
+- `inside`: append `newNode` to the right-clicked node's `children` array (only valid for object/array types)
+
+Implementation: recursive pure helper `insertNodeInTree(tree, siblingId, position, newNode)` that clones only the path from root to the insertion point.
+
+New context methods:
+```ts
+addTreeNode: (siblingId: string, side: Side, position: 'above' | 'below' | 'inside', newNode: TreeNode) => void
+```
+
+### 2B. Add helpers to `src/lib/mapper/utils.ts`
+
+```ts
+createNewTreeNode(parentId: string, key: string, type: 'primitive' | 'array' | 'object', depth: number): TreeNode
+findParentNode(tree: TreeNode, targetId: string): TreeNode | null
+```
+
+`createNewTreeNode` generates a node with `id = parentId.key`, appropriate `children` (empty array for object/array, undefined for primitive), and sets `value`/`rawValue` to empty string for primitives.
+
+### 2C. Create `src/components/mapper/add-node-dialog.tsx`
+
+Small glass-morphism modal (same pattern as error modal in `generate-modal.tsx`):
+- Input for node key name (uses existing `Input` + `Label` components)
+- Shows the selected type + position as context
+- Cancel / Add buttons (`rounded-full`)
+- Animation: `animate-modal-enter`
+
+---
+
+## Feature 3: Conditional DSL Mapping
+
+### 3A. Extend types in `src/lib/mapper/types.ts`
+
+```ts
+export type ConditionOperator = '==' | '!=' | '>' | '<' | '>=' | '<=' | 'contains' | 'startsWith' | 'endsWith'
+
+export interface MappingCondition {
+  field: string              // source path to evaluate, e.g. "root.products[0].price"
+  operator: ConditionOperator
+  value: string              // always stored as string; engine coerces for numeric ops
+}
+
+export type TransformType = 'add' | 'subtract' | 'multiply' | 'divide' | 'add_percent' | 'subtract_percent'
+
+export interface MappingTransform {
+  type: TransformType
+  value: number
+}
+
+export interface Mapping {
+  id: string
+  sourceId: string
+  targetId: string
+  condition?: MappingCondition   // NEW
+  transform?: MappingTransform   // NEW
+}
+```
+
+### 3B. Extend DSL in `src/lib/mapper/dsl.ts`
+
+**New DSL syntax** (backward compatible — existing lines without WHERE/THEN still work):
+
+```
+# Simple mapping (unchanged)
+source.path -> target.path
+
+# Conditional mapping
+products[0].name -> items[0].description WHERE products[0].price > 100
+
+# Conditional + transform
+products[0].price -> items[0].cost WHERE products[0].price > 40 THEN +5%
+
+# Transform only (no condition)
+products[0].price -> items[0].cost THEN *1.05
+```
+
+**WHERE clause**: `WHERE <field> <operator> <value>`
+- String values in double quotes: `WHERE name == "Laptop"`
+- Numeric values unquoted: `WHERE price > 100`
+- Operators: `==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`, `startsWith`, `endsWith`
+
+**THEN clause**: `THEN <op><value>`
+- `+5%` → add_percent 5
+- `-10%` → subtract_percent 10
+- `*1.05` → multiply 1.05
+- `+100` → add 100
+- `-50` → subtract 50
+- `/2` → divide 2
+
+**Updated regex:**
+```ts
+const LINE_REGEX = /^\s*(.+?)\s*->\s*(.+?)(?:\s+WHERE\s+(.+?))?(?:\s+THEN\s+(.+?))?\s*$/i
+const CONDITION_REGEX = /^(.+?)\s*(==|!=|>=|<=|>|<|contains|startsWith|endsWith)\s*(.+)$/
+const TRANSFORM_REGEX = /^([+\-*/])(\d+(?:\.\d+)?)(%)?\s*$/
+```
+
+Update `parseDSL()` to extract optional WHERE + THEN clauses. Update `generateDSL()` to emit them.
+
+### 3C. Update engine in `src/lib/mapper/engine.ts`
+
+**Add `evaluateCondition(sourceData, condition)`:**
+```ts
+function evaluateCondition(sourceData: unknown, condition: MappingCondition): boolean {
+  const fieldValue = getValueAtPath(sourceData, condition.field)
+  if (fieldValue === undefined || fieldValue === null) return false
+  // For ==, != : compare as strings
+  // For >, <, >=, <= : coerce to number
+  // For contains, startsWith, endsWith : string operations
+}
+```
+
+**Add `applyTransform(value, transform)`:**
+```ts
+function applyTransform(value: unknown, transform: MappingTransform): unknown {
+  const num = Number(value)
+  if (isNaN(num)) return value // can't transform non-numeric
+  switch (transform.type) {
+    case 'add': return num + transform.value
+    case 'subtract': return num - transform.value
+    case 'multiply': return num * transform.value
+    case 'divide': return transform.value !== 0 ? num / transform.value : num
+    case 'add_percent': return num * (1 + transform.value / 100)
+    case 'subtract_percent': return num * (1 - transform.value / 100)
+  }
+}
+```
+
+**Update `applyMappings()` loop:**
+```ts
+for (const mapping of mappings) {
+  // 1. Check condition — skip if not met
+  if (mapping.condition) {
+    if (!evaluateCondition(sourceData, mapping.condition)) continue
+  }
+
+  // 2. Get source value
+  const sourceValue = getValueAtPath(sourceData, sourcePath)
+  if (sourceValue === undefined) { errors.push(...); continue }
+
+  // 3. Apply transform if present
+  const finalValue = mapping.transform
+    ? applyTransform(sourceValue, mapping.transform)
+    : sourceValue
+
+  // 4. Set on target
+  setValueAtPath(result, targetPath, finalValue)
+}
+```
+
+### 3D. Add condition update to `src/lib/mapper/context.tsx`
+
+New action:
+```ts
+| { type: 'UPDATE_MAPPING_CONDITION'; payload: { mappingId: string; condition?: MappingCondition; transform?: MappingTransform } }
+```
+
+New context method:
+```ts
+updateMappingRule: (mappingId: string, condition?: MappingCondition, transform?: MappingTransform) => void
+```
+
+---
+
+## Feature 4: Edit Mapping Modal
+
+### 4A. Create `src/components/mapper/edit-mapping-modal.tsx`
+
+Glass-morphism modal showing:
+
+1. **Mapping paths** (read-only): `source.path → target.path` with `text-source` / `text-target` colors
+2. **Condition section** with toggle (Enabled/Disabled pill button):
+   - Source Field input (defaults to `mapping.sourceId`)
+   - Operator select (using existing `Select` component): all `ConditionOperator` values
+   - Value input
+3. **Transform section** with toggle:
+   - Operation select: `+ (Add)`, `- (Subtract)`, `* (Multiply)`, `/ (Divide)`, `+% (Add %)`, `-% (Subtract %)`
+   - Value input (numeric)
+4. Cancel / Save buttons
+
+Calls `updateMappingRule(mappingId, condition, transform)` on save.
+
+---
+
+## Feature 5: Visual Indicators
+
+### 5A. Update `src/components/mapper/mapper-flow.tsx`
+
+In the mappings list, show condition/transform badges after the arrow:
+
+```tsx
+{mapping.condition && (
+  <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium">
+    IF {field} {op} {value}
+  </span>
+)}
+{mapping.transform && (
+  <span className="px-2 py-0.5 rounded-full bg-chart-5/15 text-chart-5 text-xs font-medium">
+    {formatTransform(transform)}
+  </span>
+)}
+```
+
+---
+
+## Files Summary
+
+### New files
+| File | Purpose |
+|------|---------|
+| `src/components/ui/context-menu.tsx` | ContextMenu component (Base UI wrapper) |
+| `src/components/mapper/add-node-dialog.tsx` | Modal for naming new tree nodes |
+| `src/components/mapper/edit-mapping-modal.tsx` | Modal for editing conditions/transforms |
+
+### Modified files
+| File | Changes |
+|------|---------|
+| `src/lib/mapper/types.ts` | Add `MappingCondition`, `MappingTransform`, `ConditionOperator`, `TransformType`; extend `Mapping` |
+| `src/lib/mapper/context.tsx` | Add `ADD_TREE_NODE`, `UPDATE_MAPPING_CONDITION` actions; new context methods |
+| `src/lib/mapper/utils.ts` | Add `createNewTreeNode`, `findParentNode` helpers |
+| `src/lib/mapper/dsl.ts` | Extend parser/generator for `WHERE` + `THEN` clauses |
+| `src/lib/mapper/engine.ts` | Add `evaluateCondition`, `applyTransform`; update `applyMappings` loop |
+| `src/components/mapper/tree-node.tsx` | Wrap nodes in ContextMenu; add menu items; state for dialogs |
+| `src/components/mapper/mapper-flow.tsx` | Show condition/transform badges in mappings list |
+
+### Test files to update
+| File | New tests |
+|------|-----------|
+| `src/lib/mapper/__tests__/dsl.test.ts` | WHERE/THEN parsing, generation, round-trip |
+| `src/lib/mapper/__tests__/engine.test.ts` | Condition evaluation, transform application, skip-on-fail |
+
+---
+
+## Implementation Order
+
+```
+1. types.ts          ← foundation, no dependencies
+2. context.tsx       ← depends on types.ts
+3. utils.ts          ← depends on types.ts
+4. dsl.ts            ← depends on types.ts
+5. engine.ts         ← depends on types.ts
+6. context-menu.tsx  ← independent UI component (can parallel with 2-5)
+7. add-node-dialog.tsx   ← depends on context.tsx, utils.ts
+8. edit-mapping-modal.tsx ← depends on types.ts, context.tsx
+9. tree-node.tsx     ← depends on 6, 7, 8
+10. mapper-flow.tsx  ← depends on types.ts (for badge display)
+11. Tests            ← after 4, 5
+```
+
+Steps 2-5 can run in parallel. Step 6 is independent.
+
+---
+
+## Verification
+
+1. **Unit tests**: `bun test` — run updated DSL and engine tests
+2. **Manual testing**:
+   - Load `sampleInput3.json` (source) and `sampleOutput3.json` (target)
+   - Right-click source node → Add Node (above/below/inside with all types)
+   - Right-click target node → Add Node, Edit Mapping, Clear Mapping
+   - Create a mapping via drag-and-drop
+   - Right-click mapped target → Edit Mapping → add condition `products[0].price > 500`
+   - Open Generate Result → verify DSL shows `WHERE` clause
+   - Run → verify output skips mapping when condition fails
+   - Add a transform (`THEN +5%`) → verify output applies percentage
+3. **Dev server**: `bun dev` — check for runtime errors, context menu positioning, modal animations
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.

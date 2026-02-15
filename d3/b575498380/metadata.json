@@ -1,0 +1,37 @@
+{
+  "cli_version": "0.4.4",
+  "checkpoint_id": "d3b575498380",
+  "strategy": "manual-commit",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/mapper/add-node-dialog.tsx",
+    "src/components/mapper/edit-mapping-modal.tsx",
+    "src/components/mapper/mapper-flow.tsx",
+    "src/components/mapper/tree-node.tsx",
+    "src/components/ui/context-menu.tsx",
+    "src/lib/mapper/__tests__/dsl.test.ts",
+    "src/lib/mapper/__tests__/engine.test.ts",
+    "src/lib/mapper/context.tsx",
+    "src/lib/mapper/dsl.ts",
+    "src/lib/mapper/engine.ts",
+    "src/lib/mapper/types.ts",
+    "src/lib/mapper/utils.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/d3/b575498380/0/metadata.json",
+      "transcript": "/d3/b575498380/0/full.jsonl",
+      "context": "/d3/b575498380/0/context.md",
+      "content_hash": "/d3/b575498380/0/content_hash.txt",
+      "prompt": "/d3/b575498380/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 48,
+    "cache_creation_tokens": 91144,
+    "cache_read_tokens": 3771948,
+    "output_tokens": 8761,
+    "api_call_count": 46
+  }
+}

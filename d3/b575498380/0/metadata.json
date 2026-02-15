@@ -1,0 +1,40 @@
+{
+  "cli_version": "0.4.4",
+  "checkpoint_id": "d3b575498380",
+  "session_id": "b3a4193d-a74a-465d-b57e-8dfa2ff7dc9b",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-15T14:58:04.263082Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/mapper/add-node-dialog.tsx",
+    "src/components/mapper/edit-mapping-modal.tsx",
+    "src/components/mapper/mapper-flow.tsx",
+    "src/components/mapper/tree-node.tsx",
+    "src/components/ui/context-menu.tsx",
+    "src/lib/mapper/__tests__/dsl.test.ts",
+    "src/lib/mapper/__tests__/engine.test.ts",
+    "src/lib/mapper/context.tsx",
+    "src/lib/mapper/dsl.ts",
+    "src/lib/mapper/engine.ts",
+    "src/lib/mapper/types.ts",
+    "src/lib/mapper/utils.ts"
+  ],
+  "agent": "Claude Code",
+  "token_usage": {
+    "input_tokens": 48,
+    "cache_creation_tokens": 91144,
+    "cache_read_tokens": 3771948,
+    "output_tokens": 8761,
+    "api_call_count": 46
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-15T14:58:04.126433Z",
+    "agent_lines": 1596,
+    "human_added": 1,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 1597,
+    "agent_percentage": 99.93738259236068
+  }
+}
