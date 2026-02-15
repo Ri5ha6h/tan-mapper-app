@@ -1,0 +1,100 @@
+Implement the following plan:
+
+# Update CLAUDE.md with UI Design System Conventions
+
+## Context
+
+The app just underwent a full visual revamp from cold/technical to a **Soft/Organic dark mode** aesthetic. The current `CLAUDE.md` has no documentation about the design system, theme, color tokens, animation patterns, or component styling conventions. Without this, future changes risk drifting from the established aesthetic. The goal is to add sections that codify these patterns as durable instructions.
+
+---
+
+## What to Add
+
+Add a new **`## Design System`** top-level section after the existing `## Architecture` section (before `## TanStack Start Patterns`). This keeps all visual/UI concerns grouped together, separate from framework patterns.
+
+### Section: Design System
+
+**Sub-sections to include:**
+
+### 1. Visual Identity (2-3 lines)
+- Soft/Organic aesthetic, dark mode primary
+- Warm, rounded, approachable — not cold/technical
+
+### 2. Typography
+- **Primary**: `Sora Variable` (`@fontsource-variable/sora`) — geometric sans-serif with rounded terminals
+- **Code/Mono**: `Geist Mono Variable` (`@fontsource-variable/geist-mono`) — mapping paths, Monaco editors
+- Headings: `font-semibold tracking-tight`
+- Body/UI: Regular (400) / Medium (500)
+
+### 3. Color Palette
+- All colors use **OKLCH** format
+- Dark mode tokens (the primary theme) in a concise table:
+
+| Role | Token | Description |
+|------|-------|-------------|
+| Background | `--background` | Deep plum-charcoal |
+| Foreground | `--foreground` | Warm off-white |
+| Primary | `--primary` | Soft peach/coral |
+| Secondary | `--secondary` | Soft lavender |
+| Accent | `--accent` | Soft mint/teal |
+| Destructive | `--destructive` | Soft warm red |
+
+### 4. Semantic Mapper Tokens
+- Custom tokens beyond standard shadcn: `--source` (peach), `--target` (lavender), `--mapped` (rose), `--glass-bg`, `--glass-border`, `--connection-start`, `--connection-end`
+- Tailwind classes: `text-source`, `bg-target/10`, `bg-glass-bg`, `border-glass-border`, etc.
+- Registered in `@theme inline` block in `src/styles.css`
+
+### 5. Glass-morphism Pattern
+- Standard recipe: `bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg rounded-xl`
+- Used for: tree cards, mappings panel, modals, pane labels
+
+### 6. Border Radius & Shapes
+- Base `--radius`: `0.875rem`
+- Pill shapes (`rounded-full`) for: tree nodes, mapping items, file badges, buttons, drag overlay
+- `rounded-xl` for: cards, upload areas
+- `rounded-2xl` for: modals
+
+### 7. Animations
+- Defined as keyframes + utility classes in `src/styles.css`
+- `animate-fade-in-up` + `animate-stagger-{1-4}` for entrance sequencing
+- `animate-modal-enter` for modal/dialog entry
+- `animate-mapped-glow` for mapped node state
+- `flow-dash` + `dot-pulse` for SVG connection line effects
+
+### 8. Dark Mode
+- Default and only mode — `className="dark"` on `<html>`, `color-scheme: dark` meta tag
+- Do NOT add light mode toggles or light-mode-specific styles
+
+### 9. Component Styling Patterns (brief)
+- **Tree nodes**: Pill-shaped rows, pastel type icons (lavender=object, mint=array, peach=primitive, amber=xml-attr), CSS grid expand/collapse
+- **Connection lines**: Peach-to-lavender SVG gradient, glow filter, animated dashes, colored endpoint dots
+- **Modals**: Glass-morphism + `animate-modal-enter`, backdrop blur
+- **File badges**: Pill with side-based color tint (`bg-source/10` or `bg-target/10`)
+- **Upload areas**: Dashed border (`border-2 border-dashed`), hover to primary tint
+- **Monaco editors**: Always use `theme="vs-dark"`
+
+---
+
+## Also Update
+
+- **Tech Stack** line: Add Sora Variable font mention
+- **Adding UI Components** section: Add note that new shadcn components should be styled to match glass-morphism / pill / warm palette conventions (not left at defaults)
+
+---
+
+## File Modified
+
+| File | Change |
+|------|--------|
+| `CLAUDE.md` | Add "Design System" section, update Tech Stack line, update "Adding UI Components" note |
+
+## Verification
+
+1. Read through the updated `CLAUDE.md` and confirm all current patterns from `src/styles.css` and component files are accurately represented
+2. Ensure no contradictions with existing sections
+3. Run `bun run build` to confirm no accidental changes (doc-only change)
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.
