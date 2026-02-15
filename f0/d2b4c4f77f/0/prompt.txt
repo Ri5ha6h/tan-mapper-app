@@ -1,0 +1,116 @@
+Implement the following plan:
+
+# Plan: Update CLAUDE.md with TanStack Start Best Practices
+
+## Context
+The existing CLAUDE.md covers the project structure, dev commands, and UI component conventions, but lacks TanStack Start-specific development practices. As the app grows beyond the current starter template, developers (and Claude Code) need guidance on server functions, data loading, routing patterns, middleware, execution model, and file conventions to avoid common pitfalls.
+
+## Changes
+
+**File to modify**: `/Users/kakarot/Self/Sandbox/tan-mapper-app/CLAUDE.md`
+
+### What to add
+
+Add a new **"TanStack Start Patterns"** section after the existing "Architecture" section, covering the following subsections:
+
+#### 1. Execution Model
+- All code is **isomorphic by default** — included in both server and client bundles unless explicitly constrained
+- Route loaders run on server during initial SSR, but **run on CLIENT during navigation** — never put secrets directly in loaders
+- Use `createServerFn()` to guarantee server-only execution
+
+#### 2. Server Functions (`createServerFn`)
+- Import from `@tanstack/react-start`
+- Default method is GET; use `{ method: 'POST' }` for mutations
+- Chain `.validator()` for input validation (e.g. with Zod)
+- Access handler input via `{ data }` parameter
+- Call from route loaders or components
+
+```ts
+import { createServerFn } from '@tanstack/react-start'
+
+const getItems = createServerFn().handler(async () => {
+  return db.items.findMany()
+})
+
+const createItem = createServerFn({ method: 'POST' })
+  .validator(z.object({ name: z.string() }))
+  .handler(async ({ data }) => {
+    return db.items.create({ data })
+  })
+```
+
+#### 3. API Routes (`server.handlers`)
+- For client-side event handlers (form submits, button clicks), use API routes
+- Define via `server.handlers` on a file route
+- Supports GET, POST, PUT, DELETE etc.
+- Return `Response.json()` for JSON responses
+
+```ts
+export const Route = createFileRoute('/api/items')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const body = await request.json()
+        return Response.json(await db.items.create(body))
+      },
+    },
+  },
+})
+```
+
+#### 4. Route Data Loading
+- Use `loader` option on routes to fetch data
+- Call `createServerFn` wrappers from loaders for server-only data
+- Access loader data in components via `Route.useLoaderData()`
+- `beforeLoad` runs before loader — use for auth checks, redirects
+- `validateSearch` for typed search params
+
+```ts
+export const Route = createFileRoute('/posts/$postId')({
+  loader: ({ params }) => getPost({ data: params.postId }),
+  component: () => {
+    const post = Route.useLoaderData()
+    return <h1>{post.title}</h1>
+  },
+})
+```
+
+#### 5. Middleware
+- Create with `createMiddleware()` from `@tanstack/react-start`
+- Use `.server()` method with `next` callback for the middleware chain
+- Attach to routes via `server: { middleware: [...] }`
+- Common patterns: auth checks, logging, request enrichment
+
+#### 6. File Conventions
+- `.functions.ts` — Export `createServerFn` wrappers (safe to import anywhere)
+- `.server.ts` — Server-only code (only import inside server function handlers)
+- `.ts` (no suffix) — Client-safe code (types, schemas, constants)
+
+#### 7. Routing File Patterns
+Document the file-based routing conventions already in use:
+| Pattern | Route |
+|---------|-------|
+| `index.tsx` | `/` |
+| `posts.$postId.tsx` | `/posts/:postId` |
+| `_layout.tsx` | Layout wrapper (no URL segment) |
+| `__root.tsx` | Root layout (required) |
+
+### What to update in existing sections
+
+- **Tech Stack**: Add Nitro as the server runtime explicitly
+- **Architecture**: Add mention of `routeTree.gen.ts` as auto-generated (do not edit manually)
+
+### What NOT to add
+- Cloudflare-specific deployment details (not currently used)
+- Better-Auth patterns (no auth configured yet)
+- TanStack Query SSR patterns (can be added when query integration is set up)
+
+## Verification
+- Read the modified CLAUDE.md to verify accuracy
+- Cross-check all code examples against the actual project imports and patterns in `vite.config.ts`, `src/router.tsx`, `src/routes/__root.tsx`
+- Ensure `verbatimModuleSyntax` warning is included (tsconfig already has it set to `false`)
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.
