@@ -1,0 +1,146 @@
+Implement the following plan:
+
+# UI Revamp: Soft/Organic Dark Mode
+
+## Context
+
+The Data Mapper app currently uses a cold, technical aesthetic (Geist Mono font, lime/green primary, 0.45rem radius, standard shadcn/ui look). The goal is a full visual revamp to a **Soft/Organic** aesthetic with **dark mode primary** — warm, inviting, rounded shapes, pastel gradients, gentle shadows, and smooth animations that make complex data mapping feel approachable.
+
+---
+
+## Design Direction
+
+### Typography: **Sora Variable**
+- Geometric sans-serif with distinctly rounded terminals — warm without being childish
+- Headings: Sora SemiBold (600), `tracking-tight`
+- Body/UI: Sora Regular (400) / Medium (500)
+- Code contexts (mapping paths, Monaco): Keep Geist Mono Variable as secondary
+
+### Color Palette (OKLCH, Dark Mode)
+
+| Token | Value | Description |
+|-------|-------|-------------|
+| `--background` | `oklch(0.16 0.015 300)` | Deep plum-charcoal |
+| `--foreground` | `oklch(0.93 0.01 80)` | Warm off-white |
+| `--card` | `oklch(0.20 0.018 295)` | Elevated plum surface |
+| `--primary` | `oklch(0.78 0.12 45)` | Soft peach/coral |
+| `--secondary` | `oklch(0.72 0.10 290)` | Soft lavender |
+| `--accent` | `oklch(0.75 0.10 175)` | Soft mint/teal |
+| `--destructive` | `oklch(0.65 0.2 25)` | Soft warm red |
+| `--muted` | `oklch(0.24 0.015 295)` | Subtle plum-grey |
+| `--border` | `oklch(1 0 0 / 8%)` | Very subtle white |
+
+New semantic tokens: `--source` (peach), `--target` (lavender), `--mapped` (rose), `--glass-bg`, `--glass-border`, `--connection-start/end`
+
+### Border Radius: `0.875rem` base (up from `0.45rem`)
+- Pill shapes (`rounded-full`) for tree nodes, mapping items, file badges, drag overlay
+
+### Glass-morphism on cards
+- `backdrop-blur-xl` + semi-transparent backgrounds + subtle borders + soft shadows
+
+---
+
+## Implementation Steps
+
+### Step 1: Install font
+```bash
+bun add @fontsource-variable/sora
+```
+
+### Step 2: `src/styles.css` — Complete theme rewrite
+- Add `@import "@fontsource-variable/sora"`
+- Replace all `:root` and `.dark` CSS variable values with warm palette
+- Add new semantic variables (`--source`, `--target`, `--mapped`, `--glass-bg`, `--glass-border`, `--connection-start/end`)
+- Change `--radius` to `0.875rem`
+- Update `@theme inline`: add `--font-sans: "Sora Variable", system-ui, sans-serif`, add new color mappings
+- Add `@keyframes`: `fade-in-up`, `dot-pulse`, `flow-dash`, `mapped-glow`, `modal-enter`
+- Add utility classes: `.animate-fade-in-up`, `.animate-stagger-{1-4}`, `.animate-modal-enter`, `.animate-mapped-glow`
+- Update body: radial gradient background (warm plum/purple tints)
+
+### Step 3: `src/routes/__root.tsx` — Dark mode activation
+- Add `className="dark"` to `<html>`
+- Add `color-scheme: dark` meta tag
+- Add `antialiased` class to `<body>`
+
+### Step 4: `src/routes/index.tsx` — Header & layout shell
+- Add ambient radial gradient background layer (fixed, decorative, pointer-events-none)
+- Revamp header: gradient background, backdrop-blur, decorative glowing dot, better spacing (`px-6 py-4`)
+- Add staggered `animate-fade-in-up` to header and content
+
+### Step 5: `src/components/mapper/mapper-flow.tsx` — Main layout
+- Glass-morphism on all 3 Cards (`bg-glass-bg backdrop-blur-xl border-glass-border shadow-lg`)
+- Source/Target labels colored with `text-source` / `text-target`
+- Increase spacing: `gap-5 px-6`, `mx-6 mb-6`
+- Mappings count as pill badge (`bg-primary/15 text-primary rounded-full`)
+- Mapping items: `rounded-full bg-muted/30`, source text `text-source`, target text `text-target`
+- Better empty state with centered icon and animated fade-in
+- Drag overlay: pill-shaped with glow (`shadow-xl shadow-primary/25`)
+
+### Step 6: `src/components/mapper/file-upload.tsx` — Upload area
+- Replace `Button` with dashed-border area (`border-2 border-dashed rounded-xl`) with hover: `border-primary/50 bg-primary/5`
+- File badge: pill-shaped with source/target color tint (`bg-source-soft` / `bg-target-soft`)
+
+### Step 7: `src/components/mapper/tree-view.tsx` — Empty state
+- Add `FileText` icon in rounded container
+- Softer message text, `animate-fade-in-up`
+- Increase tree padding to `p-3`
+
+### Step 8: `src/components/mapper/tree-node.tsx` — Node styling
+- Pill-shaped node rows: `rounded-full`, `gap-1.5 px-3 py-1.5`
+- Hover: `hover:bg-muted/40 hover:scale-[1.01]`
+- Mapped state: `bg-mapped-soft animate-mapped-glow`
+- Drop target: `bg-target-soft ring-2 ring-target/50 scale-[1.02]`
+- Pastel type icons: lavender for objects, mint for arrays, amber for XML attrs, peach for primitives
+- Increase depth indentation: `depth * 20 + 12px`
+- Smooth expand/collapse via CSS grid-template-rows transition (`0fr` <-> `1fr`)
+
+### Step 9: `src/components/mapper/connection-lines.tsx` — Line styling
+- Gradient: peach (`oklch(0.78 0.12 45)`) to lavender (`oklch(0.72 0.10 290)`)
+- Add SVG glow filter (`feGaussianBlur` + `feMerge`)
+- Animated dashed stroke (`stroke-dasharray: 6 4`, `flow-dash` animation)
+- Endpoint dots: source=peach, target=lavender, with `dot-pulse` animation
+- Wider click target (`strokeWidth={16}`)
+
+### Step 10: `src/components/mapper/generate-modal.tsx` — Modal styling
+- Backdrop: `bg-black/40 backdrop-blur-sm`
+- Modal: `bg-glass-bg backdrop-blur-xl border-glass-border rounded-2xl animate-modal-enter`
+- Header: `bg-muted/20 border-glass-border`, more padding
+- All 3 Monaco editors: add `theme="vs-dark"`
+- Pane labels: `bg-muted/30 border-glass-border backdrop-blur-sm`
+- Dividers: `bg-glass-border h-1.5 / w-1.5`
+- Error modal: same glass-morphism treatment, `bg-destructive/10 rounded-xl` for error list
+
+---
+
+## Files Modified (10)
+
+| File | Change Summary |
+|------|---------------|
+| `src/styles.css` | Complete theme rewrite: colors, font, radius, keyframes, utilities, background |
+| `src/routes/__root.tsx` | Dark class, color-scheme meta, antialiased |
+| `src/routes/index.tsx` | Ambient gradient bg, header redesign, staggered animations |
+| `src/components/mapper/mapper-flow.tsx` | Glass cards, spacing, mappings panel, drag overlay |
+| `src/components/mapper/file-upload.tsx` | Dashed upload area, colored file badges |
+| `src/components/mapper/tree-view.tsx` | Icon empty state, padding |
+| `src/components/mapper/tree-node.tsx` | Pill nodes, pastel icons, mapped glow, grid expand/collapse |
+| `src/components/mapper/connection-lines.tsx` | Peach-lavender gradient, glow, dash animation, colored dots |
+| `src/components/mapper/generate-modal.tsx` | Glass modal, backdrop blur, Monaco dark theme, softer errors |
+| `package.json` | Add `@fontsource-variable/sora` |
+
+## Verification
+
+1. Run `bun add @fontsource-variable/sora` to install the font
+2. Run `bun dev` and open `localhost:4008`
+3. Verify dark mode is active by default (deep plum background, warm off-white text)
+4. Verify Sora font is rendering (check devtools computed font-family)
+5. Upload a JSON source and target file — check tree rendering (pill nodes, pastel icons, expanded spacing)
+6. Create mappings via drag-and-drop — check connection lines (peach-to-lavender gradient, animated dashes, glowing dots)
+7. Check mapped nodes have rose glow animation
+8. Open Generate modal — verify glass-morphism, Monaco dark theme, rounded corners
+9. Check responsive behavior (the layout should still work at various viewport sizes)
+10. Run `bun run build` to verify no build errors
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.
