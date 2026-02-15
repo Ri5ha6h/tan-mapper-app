@@ -9,11 +9,13 @@
         "test": "vitest run",
         "lint": "eslint",
         "format": "prettier --check .",
-        "check": "prettier --write . && eslint --fix"
+        "check": "prettier --write . && eslint --fix src"
     },
     "dependencies": {
         "@base-ui/react": "^1.2.0",
+        "@dnd-kit/core": "^6.3.1",
         "@fontsource-variable/geist-mono": "^5.2.7",
+        "@monaco-editor/react": "^4.7.0",
         "@tailwindcss/vite": "^4.0.6",
         "@tanstack/react-devtools": "^0.7.0",
         "@tanstack/react-router": "^1.132.0",
@@ -23,6 +25,7 @@
         "@tanstack/router-plugin": "^1.132.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
+        "fast-xml-parser": "^5.3.6",
         "lucide-react": "^0.564.0",
         "nitro": "latest",
         "react": "^19.2.0",
