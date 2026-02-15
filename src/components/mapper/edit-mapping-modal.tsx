@@ -22,11 +22,7 @@ interface EditMappingModalProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     mapping: Mapping
-    onSave: (
-        mappingId: string,
-        condition?: MappingCondition,
-        transform?: MappingTransform,
-    ) => void
+    onSave: (mappingId: string, condition?: MappingCondition, transform?: MappingTransform) => void
 }
 
 const OPERATORS: Array<{ value: ConditionOperator; label: string }> = [
@@ -54,12 +50,7 @@ function stripRoot(path: string): string {
     return path.replace(/^root\.?/, "") || "root"
 }
 
-export function EditMappingModal({
-    open,
-    onOpenChange,
-    mapping,
-    onSave,
-}: EditMappingModalProps) {
+export function EditMappingModal({ open, onOpenChange, mapping, onSave }: EditMappingModalProps) {
     const [conditionEnabled, setConditionEnabled] = useState(false)
     const [condField, setCondField] = useState("")
     const [condOperator, setCondOperator] = useState<ConditionOperator>("==")
@@ -165,7 +156,10 @@ export function EditMappingModal({
                         {conditionEnabled && (
                             <div className="space-y-3 pl-1">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="cond-field" className="text-xs text-muted-foreground">
+                                    <Label
+                                        htmlFor="cond-field"
+                                        className="text-xs text-muted-foreground"
+                                    >
                                         Source Field
                                     </Label>
                                     <Input
@@ -178,7 +172,9 @@ export function EditMappingModal({
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs text-muted-foreground">Operator</Label>
+                                        <Label className="text-xs text-muted-foreground">
+                                            Operator
+                                        </Label>
                                         <Select
                                             value={condOperator}
                                             onValueChange={(val) =>
@@ -199,7 +195,10 @@ export function EditMappingModal({
                                     </div>
 
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="cond-value" className="text-xs text-muted-foreground">
+                                        <Label
+                                            htmlFor="cond-value"
+                                            className="text-xs text-muted-foreground"
+                                        >
                                             Value
                                         </Label>
                                         <Input
@@ -233,7 +232,9 @@ export function EditMappingModal({
                         {transformEnabled && (
                             <div className="grid grid-cols-2 gap-3 pl-1">
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs text-muted-foreground">Operation</Label>
+                                    <Label className="text-xs text-muted-foreground">
+                                        Operation
+                                    </Label>
                                     <Select
                                         value={transformType}
                                         onValueChange={(val) =>
@@ -254,7 +255,10 @@ export function EditMappingModal({
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="transform-value" className="text-xs text-muted-foreground">
+                                    <Label
+                                        htmlFor="transform-value"
+                                        className="text-xs text-muted-foreground"
+                                    >
                                         Value
                                     </Label>
                                     <Input

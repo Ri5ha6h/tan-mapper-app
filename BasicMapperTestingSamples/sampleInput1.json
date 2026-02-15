@@ -1,6 +1,6 @@
 {
-  "id": "101",
-  "first_name": "John",
-  "last_name": "Doe",
-  "age": "28"
+    "id": "101",
+    "first_name": "John",
+    "last_name": "Doe",
+    "age": "28"
 }

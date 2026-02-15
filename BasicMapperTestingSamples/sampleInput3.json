@@ -1,14 +1,14 @@
 {
-  "products": [
-    {
-      "id": 1,
-      "name": "Laptop",
-      "price": 900
-    },
-    {
-      "id": 2,
-      "name": "Mouse",
-      "price": 20
-    }
-  ]
+    "products": [
+        {
+            "id": 1,
+            "name": "Laptop",
+            "price": 900
+        },
+        {
+            "id": 2,
+            "name": "Mouse",
+            "price": 20
+        }
+    ]
 }

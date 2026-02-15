@@ -155,7 +155,9 @@ export function applyMappings(
             continue
         }
 
-        const finalValue = mapping.transform ? applyTransform(sourceValue, mapping.transform) : sourceValue
+        const finalValue = mapping.transform
+            ? applyTransform(sourceValue, mapping.transform)
+            : sourceValue
 
         setValueAtPath(result, targetPath, finalValue)
     }

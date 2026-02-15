@@ -1,13 +1,13 @@
 {
-  "shipment": {
-    "id": "SHIP001",
-    "origin": {
-      "city": "New York",
-      "country": "USA"
-    },
-    "destination": {
-      "city": "Paris",
-      "country": "France"
+    "shipment": {
+        "id": "SHIP001",
+        "origin": {
+            "city": "New York",
+            "country": "USA"
+        },
+        "destination": {
+            "city": "Paris",
+            "country": "France"
+        }
     }
-  }
 }

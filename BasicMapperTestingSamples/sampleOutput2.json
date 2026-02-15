@@ -1,11 +1,11 @@
 {
-  "order": {
-    "id": "",
-    "amount": {
-      "value": 0,
-      "currency": ""
-    }
-  },
-  "customer_name": "",
-  "customer_email": ""
+    "order": {
+        "id": "",
+        "amount": {
+            "value": 0,
+            "currency": ""
+        }
+    },
+    "customer_name": "",
+    "customer_email": ""
 }

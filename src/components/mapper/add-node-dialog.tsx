@@ -1,9 +1,9 @@
 import { useState } from "react"
 import { FileText, Folder, List } from "lucide-react"
+import type { NodeType } from "@/lib/mapper/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import type { NodeType } from "@/lib/mapper/types"
 import { cn } from "@/lib/utils"
 
 interface AddNodeDialogProps {
@@ -62,7 +62,16 @@ export function AddNodeDialog({
                 <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
                     <span className="capitalize">{position}</span>
                     <span>&middot;</span>
-                    <TypeIcon className={cn("h-4 w-4", nodeType === "object" ? "text-secondary" : nodeType === "array" ? "text-accent" : "text-source")} />
+                    <TypeIcon
+                        className={cn(
+                            "h-4 w-4",
+                            nodeType === "object"
+                                ? "text-secondary"
+                                : nodeType === "array"
+                                  ? "text-accent"
+                                  : "text-source",
+                        )}
+                    />
                     <span>{typeInfo.label}</span>
                 </div>
 
@@ -87,11 +96,7 @@ export function AddNodeDialog({
                         >
                             Cancel
                         </Button>
-                        <Button
-                            type="submit"
-                            disabled={!key.trim()}
-                            className="rounded-full"
-                        >
+                        <Button type="submit" disabled={!key.trim()} className="rounded-full">
                             Add
                         </Button>
                     </div>

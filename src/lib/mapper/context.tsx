@@ -1,13 +1,7 @@
 import { createContext, useContext, useReducer } from "react"
 import { insertNodeInTree } from "./utils"
 import type { ReactNode } from "react"
-import type {
-    FileData,
-    Mapping,
-    MappingCondition,
-    MappingTransform,
-    TreeNode,
-} from "./types"
+import type { FileData, Mapping, MappingCondition, MappingTransform, TreeNode } from "./types"
 
 type Side = "source" | "target"
 

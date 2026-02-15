@@ -1,14 +1,14 @@
-import { defineConfig } from 'vitest/config'
-import viteTsConfigPaths from 'vite-tsconfig-paths'
+import { defineConfig } from "vitest/config"
+import viteTsConfigPaths from "vite-tsconfig-paths"
 
 export default defineConfig({
     plugins: [
         viteTsConfigPaths({
-            projects: ['./tsconfig.json'],
+            projects: ["./tsconfig.json"],
         }),
     ],
     test: {
         globals: true,
-        environment: 'node',
+        environment: "node",
     },
 })

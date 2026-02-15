@@ -21,10 +21,7 @@ function ContextMenuTrigger({ className, ...props }: ContextMenuPrimitive.Trigge
     )
 }
 
-function ContextMenuContent({
-    className,
-    ...props
-}: MenuPrimitive.Popup.Props) {
+function ContextMenuContent({ className, ...props }: MenuPrimitive.Popup.Props) {
     return (
         <MenuPrimitive.Portal>
             <MenuPrimitive.Positioner
@@ -97,10 +94,7 @@ function ContextMenuSubTrigger({
     )
 }
 
-function ContextMenuSubContent({
-    className,
-    ...props
-}: MenuPrimitive.Popup.Props) {
+function ContextMenuSubContent({ className, ...props }: MenuPrimitive.Popup.Props) {
     return (
         <MenuPrimitive.Portal>
             <MenuPrimitive.Positioner

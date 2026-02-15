@@ -1,8 +1,8 @@
 {
-  "employee": {
-    "emp_id": "E1001",
-    "name": "Alice",
-    "salary": 70000,
-    "department": "Engineering"
-  }
+    "employee": {
+        "emp_id": "E1001",
+        "name": "Alice",
+        "salary": 70000,
+        "department": "Engineering"
+    }
 }

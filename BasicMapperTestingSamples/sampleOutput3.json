@@ -1,9 +1,9 @@
 {
-  "items": [
-    {
-      "productId": 0,
-      "description": "",
-      "cost": 0
-    }
-  ]
+    "items": [
+        {
+            "productId": 0,
+            "description": "",
+            "cost": 0
+        }
+    ]
 }

@@ -100,7 +100,8 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
 
     const { icon: TypeIcon, colorClass: iconColor } = getTypeIcon(node.type)
 
-    const canAddInside = node.type === "object" || node.type === "array" || node.type === "xml-element"
+    const canAddInside =
+        node.type === "object" || node.type === "array" || node.type === "xml-element"
 
     const handleAddNode = (position: "above" | "below" | "inside", type: NodeType) => {
         setAddPosition(position)
@@ -127,10 +128,7 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
             </ContextMenuSubTrigger>
             <ContextMenuSubContent>
                 {NODE_TYPES.map(({ label, value, Icon }) => (
-                    <ContextMenuItem
-                        key={value}
-                        onSelect={() => handleAddNode(position, value)}
-                    >
+                    <ContextMenuItem key={value} onSelect={() => handleAddNode(position, value)}>
                         <Icon
                             className={cn(
                                 "h-4 w-4",
