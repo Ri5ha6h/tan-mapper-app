@@ -3,9 +3,27 @@
   "checkpoint_id": "f0d2b4c4f77f",
   "strategy": "manual-commit",
   "branch": "main",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
-    "CLAUDE.md"
+    "CLAUDE.md",
+    "src/components/component-example.tsx",
+    "src/components/example.tsx",
+    "src/components/mapper/connection-lines.tsx",
+    "src/components/mapper/file-upload.tsx",
+    "src/components/mapper/generate-modal.tsx",
+    "src/components/mapper/index.ts",
+    "src/components/mapper/mapper-flow.tsx",
+    "src/components/mapper/tree-node.tsx",
+    "src/components/mapper/tree-view.tsx",
+    "src/components/ui/scroll-area.tsx",
+    "src/lib/mapper/context.tsx",
+    "src/lib/mapper/dsl.ts",
+    "src/lib/mapper/engine.ts",
+    "src/lib/mapper/parsers.ts",
+    "src/lib/mapper/types.ts",
+    "src/lib/mapper/utils.ts",
+    "src/routes/__root.tsx",
+    "src/routes/index.tsx"
   ],
   "sessions": [
     {
@@ -21,13 +39,20 @@
       "context": "/f0/d2b4c4f77f/1/context.md",
       "content_hash": "/f0/d2b4c4f77f/1/content_hash.txt",
       "prompt": "/f0/d2b4c4f77f/1/prompt.txt"
+    },
+    {
+      "metadata": "/f0/d2b4c4f77f/2/metadata.json",
+      "transcript": "/f0/d2b4c4f77f/2/full.jsonl",
+      "context": "/f0/d2b4c4f77f/2/context.md",
+      "content_hash": "/f0/d2b4c4f77f/2/content_hash.txt",
+      "prompt": "/f0/d2b4c4f77f/2/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 990,
-    "cache_creation_tokens": 35755,
-    "cache_read_tokens": 803431,
-    "output_tokens": 1443,
-    "api_call_count": 22
+    "input_tokens": 1689,
+    "cache_creation_tokens": 103567,
+    "cache_read_tokens": 1832263,
+    "output_tokens": 18278,
+    "api_call_count": 38
   }
 }

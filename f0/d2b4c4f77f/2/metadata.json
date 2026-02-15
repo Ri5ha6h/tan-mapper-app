@@ -1,0 +1,46 @@
+{
+  "cli_version": "0.4.4",
+  "checkpoint_id": "f0d2b4c4f77f",
+  "session_id": "dceb81be-7540-4afa-9d42-723372ea3647",
+  "strategy": "manual-commit",
+  "created_at": "2026-02-15T10:05:40.683553Z",
+  "branch": "main",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "src/components/component-example.tsx",
+    "src/components/example.tsx",
+    "src/components/mapper/connection-lines.tsx",
+    "src/components/mapper/file-upload.tsx",
+    "src/components/mapper/generate-modal.tsx",
+    "src/components/mapper/index.ts",
+    "src/components/mapper/mapper-flow.tsx",
+    "src/components/mapper/tree-node.tsx",
+    "src/components/mapper/tree-view.tsx",
+    "src/components/ui/scroll-area.tsx",
+    "src/lib/mapper/context.tsx",
+    "src/lib/mapper/dsl.ts",
+    "src/lib/mapper/engine.ts",
+    "src/lib/mapper/parsers.ts",
+    "src/lib/mapper/types.ts",
+    "src/lib/mapper/utils.ts",
+    "src/routes/__root.tsx",
+    "src/routes/index.tsx"
+  ],
+  "agent": "Claude Code",
+  "token_usage": {
+    "input_tokens": 699,
+    "cache_creation_tokens": 67812,
+    "cache_read_tokens": 1028832,
+    "output_tokens": 16835,
+    "api_call_count": 16
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-02-15T10:05:40.569077Z",
+    "agent_lines": 0,
+    "human_added": 0,
+    "human_modified": 3,
+    "human_removed": 1548,
+    "total_committed": 3,
+    "agent_percentage": 0
+  }
+}

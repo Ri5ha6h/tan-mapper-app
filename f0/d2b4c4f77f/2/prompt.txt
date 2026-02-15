@@ -1,0 +1,167 @@
+Implement the following plan:
+
+# Plan: Port Data Mapper from Next.js to TanStack Start
+
+## Context
+
+The existing Data Mapper app at `/Users/kakarot/Self/Sandbox/mapper-dnd` (Next.js) needs to be ported to `/Users/kakarot/Self/Sandbox/tan-mapper-app` (TanStack Start). The app is entirely client-side — users upload JSON/XML files, visualize them as trees, drag-and-drop to create mappings, view SVG connection lines, edit mappings via a DSL in Monaco Editor, and generate transformed output. No server logic is involved.
+
+---
+
+## Phase 0: Install Dependencies
+
+**Step 0.1** — Install npm packages (only what's actually imported in source code):
+```sh
+bun add @dnd-kit/core @monaco-editor/react fast-xml-parser
+```
+> Note: `@dnd-kit/sortable`, `@dnd-kit/modifiers`, `@dnd-kit/utilities` are in the source's package.json but never imported — skipping them.
+
+**Step 0.2** — Add missing shadcn component:
+```sh
+bunx shadcn add scroll-area
+```
+> Generates `src/components/ui/scroll-area.tsx` using `@base-ui/react` (base-maia style).
+
+---
+
+## Phase 1: Domain Logic (`src/lib/mapper/`)
+
+Port these files from `/Users/kakarot/Self/Sandbox/mapper-dnd/lib/mapper/` with style reformatting (no semicolons, double quotes, 4-space indent, trailing commas). No functional changes needed — these are pure TypeScript.
+
+| # | File | Depends On |
+|---|------|------------|
+| 1 | `src/lib/mapper/types.ts` | — |
+| 2 | `src/lib/mapper/utils.ts` | types.ts |
+| 3 | `src/lib/mapper/parsers.ts` | types.ts, fast-xml-parser |
+| 4 | `src/lib/mapper/dsl.ts` | types.ts |
+| 5 | `src/lib/mapper/engine.ts` | types.ts, fast-xml-parser |
+| 6 | `src/lib/mapper/context.tsx` | types.ts |
+
+---
+
+## Phase 2: Mapper Components (`src/components/mapper/`)
+
+Port from `/Users/kakarot/Self/Sandbox/mapper-dnd/components/mapper/` with style reformatting. All `@/` import paths work identically.
+
+| # | File | Changes Beyond Formatting |
+|---|------|--------------------------|
+| 7 | `file-upload.tsx` | None |
+| 8 | `tree-node.tsx` | None |
+| 9 | `tree-view.tsx` | None |
+| 10 | `connection-lines.tsx` | **2 critical fixes** (see below) |
+| 11 | `generate-modal.tsx` | None |
+| 12 | `mapper-flow.tsx` | None |
+| 13 | `index.ts` | None (barrel export) |
+
+### Critical Fixes in `connection-lines.tsx`
+
+**Fix 1 — Scroll viewport selector (line 71):**
+The source queries `[data-radix-scroll-area-viewport]` to attach scroll listeners. The target's base-maia scroll-area uses `data-slot` attributes instead.
+```diff
+- container.querySelectorAll("[data-radix-scroll-area-viewport]")
++ container.querySelectorAll("[data-slot='scroll-area-viewport']")
+```
+
+**Fix 2 — CSS color function (lines 109, 110, 139, 140):**
+The source uses `hsl(var(--primary))` for SVG fill/stroke. The target defines `--primary` as an `oklch()` value — using `hsl()` with it produces no color.
+```diff
+- hsl(var(--primary))
++ oklch(var(--primary))
+```
+Four occurrences: 2 in `<linearGradient>` stops, 2 in `<circle>` fills.
+
+---
+
+## Phase 3: Modify Existing Files
+
+**14. `src/routes/index.tsx`** — Replace ComponentExample with mapper:
+```tsx
+import { createFileRoute } from "@tanstack/react-router"
+import { MapperProvider } from "@/lib/mapper/context"
+import { MapperFlow } from "@/components/mapper/mapper-flow"
+
+export const Route = createFileRoute("/")({ component: App })
+
+function App() {
+    return (
+        <main className="h-screen flex flex-col bg-background">
+            <header className="shrink-0 border-b px-4 py-3">
+                <h1 className="text-xl font-semibold">Data Mapper</h1>
+            </header>
+            <div className="flex-1 min-h-0 py-4">
+                <MapperProvider>
+                    <MapperFlow />
+                </MapperProvider>
+            </div>
+        </main>
+    )
+}
+```
+
+**15. `src/routes/__root.tsx`** — Update page title:
+```diff
+- title: "TanStack Start Starter",
++ title: "Data Mapper",
+```
+
+**16. Delete unused example files (optional):**
+- `src/components/component-example.tsx`
+- `src/components/example.tsx`
+
+---
+
+## Phase 4: Format & Verify
+
+```sh
+bun run check        # Prettier --write + ESLint --fix
+bun run build        # Catch TypeScript errors (strict mode + noUnusedLocals)
+bun dev              # Manual smoke test on http://localhost:4008
+```
+
+---
+
+## Verification Checklist
+
+1. Upload a `.json` file as source → tree renders with expand/collapse
+2. Upload a `.json` file as target → tree renders
+3. Drag a source node onto a target node → mapping appears in list, SVG line connects them
+4. Click an SVG line → mapping removed
+5. Click "Generate Result" → modal opens with DSL, Monaco editor works
+6. Click "Run" in modal → output generated correctly
+7. Scroll a tree → connection lines update positions
+8. Upload `.xml` files → parsing works for both formats
+
+---
+
+## Files Summary
+
+**New files (13):**
+- `src/lib/mapper/types.ts`
+- `src/lib/mapper/utils.ts`
+- `src/lib/mapper/parsers.ts`
+- `src/lib/mapper/dsl.ts`
+- `src/lib/mapper/engine.ts`
+- `src/lib/mapper/context.tsx`
+- `src/components/mapper/index.ts`
+- `src/components/mapper/mapper-flow.tsx`
+- `src/components/mapper/file-upload.tsx`
+- `src/components/mapper/tree-view.tsx`
+- `src/components/mapper/tree-node.tsx`
+- `src/components/mapper/connection-lines.tsx`
+- `src/components/mapper/generate-modal.tsx`
+
+**Modified files (2):**
+- `src/routes/index.tsx`
+- `src/routes/__root.tsx`
+
+**Auto-generated (1):**
+- `src/components/ui/scroll-area.tsx` (via shadcn CLI)
+
+**Deleted files (2, optional):**
+- `src/components/component-example.tsx`
+- `src/components/example.tsx`
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.REDACTED.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.
