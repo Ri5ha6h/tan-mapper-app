@@ -18,7 +18,7 @@ function App() {
 
             <header className="shrink-0 border-b border-glass-border bg-glass-bg backdrop-blur-xl px-6 py-4 relative z-10 animate-fade-in-up">
                 <div className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_oklch(0.78_0.12_45_/_50%)]" />
+                    <div className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_oklch(0.78_0.12_45/50%)]" />
                     <h1 className="text-xl font-semibold tracking-tight">Data Mapper</h1>
                 </div>
             </header>

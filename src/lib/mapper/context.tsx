@@ -1,6 +1,13 @@
 import { createContext, useContext, useReducer } from "react"
+import { insertNodeInTree } from "./utils"
 import type { ReactNode } from "react"
-import type { FileData, Mapping } from "./types"
+import type {
+    FileData,
+    Mapping,
+    MappingCondition,
+    MappingTransform,
+    TreeNode,
+} from "./types"
 
 type Side = "source" | "target"
 
@@ -20,6 +27,23 @@ type MapperAction =
     | { type: "REMOVE_MAPPINGS_FOR_NODE"; payload: { nodeId: string; side: Side } }
     | { type: "SET_MAPPINGS"; payload: Array<Mapping> }
     | { type: "TOGGLE_EXPAND"; payload: { nodeId: string; side: Side } }
+    | {
+          type: "ADD_TREE_NODE"
+          payload: {
+              siblingId: string
+              side: Side
+              position: "above" | "below" | "inside"
+              newNode: TreeNode
+          }
+      }
+    | {
+          type: "UPDATE_MAPPING_CONDITION"
+          payload: {
+              mappingId: string
+              condition?: MappingCondition
+              transform?: MappingTransform
+          }
+      }
 
 const initialState: MapperState = {
     source: null,
@@ -94,6 +118,29 @@ function mapperReducer(state: MapperState, action: MapperAction): MapperState {
             return { ...state, [key]: next }
         }
 
+        case "ADD_TREE_NODE": {
+            const { siblingId, side, position, newNode } = action.payload
+            const fileKey = side === "source" ? "source" : "target"
+            const file = state[fileKey]
+            if (!file || !file.tree) return state
+            const updatedTree = insertNodeInTree(file.tree, siblingId, position, newNode)
+            if (!updatedTree) return state
+            return {
+                ...state,
+                [fileKey]: { ...file, tree: updatedTree },
+            }
+        }
+
+        case "UPDATE_MAPPING_CONDITION": {
+            const { mappingId, condition, transform } = action.payload
+            return {
+                ...state,
+                mappings: state.mappings.map((m) =>
+                    m.id === mappingId ? { ...m, condition, transform } : m,
+                ),
+            }
+        }
+
         default:
             return state
     }
@@ -108,6 +155,17 @@ interface MapperContextValue extends MapperState {
     setMappings: (mappings: Array<Mapping>) => void
     toggleExpand: (nodeId: string, side: Side) => void
     isExpanded: (nodeId: string, side: Side) => boolean
+    addTreeNode: (
+        siblingId: string,
+        side: Side,
+        position: "above" | "below" | "inside",
+        newNode: TreeNode,
+    ) => void
+    updateMappingRule: (
+        mappingId: string,
+        condition?: MappingCondition,
+        transform?: MappingTransform,
+    ) => void
 }
 
 const MapperContext = createContext<MapperContextValue | null>(null)
@@ -154,6 +212,23 @@ export function MapperProvider({ children }: { children: ReactNode }) {
             : state.targetExpanded.has(nodeId)
     }
 
+    const addTreeNode = (
+        siblingId: string,
+        side: Side,
+        position: "above" | "below" | "inside",
+        newNode: TreeNode,
+    ) => {
+        dispatch({ type: "ADD_TREE_NODE", payload: { siblingId, side, position, newNode } })
+    }
+
+    const updateMappingRule = (
+        mappingId: string,
+        condition?: MappingCondition,
+        transform?: MappingTransform,
+    ) => {
+        dispatch({ type: "UPDATE_MAPPING_CONDITION", payload: { mappingId, condition, transform } })
+    }
+
     return (
         <MapperContext.Provider
             value={{
@@ -166,6 +241,8 @@ export function MapperProvider({ children }: { children: ReactNode }) {
                 setMappings,
                 toggleExpand,
                 isExpanded,
+                addTreeNode,
+                updateMappingRule,
             }}
         >
             {children}

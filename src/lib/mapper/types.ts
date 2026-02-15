@@ -8,10 +8,42 @@ export interface TreeNode {
     depth: number
 }
 
+export type ConditionOperator =
+    | "=="
+    | "!="
+    | ">"
+    | "<"
+    | ">="
+    | "<="
+    | "contains"
+    | "startsWith"
+    | "endsWith"
+
+export interface MappingCondition {
+    field: string
+    operator: ConditionOperator
+    value: string
+}
+
+export type TransformType =
+    | "add"
+    | "subtract"
+    | "multiply"
+    | "divide"
+    | "add_percent"
+    | "subtract_percent"
+
+export interface MappingTransform {
+    type: TransformType
+    value: number
+}
+
 export interface Mapping {
     id: string
     sourceId: string // TreeNode.id from source
     targetId: string // TreeNode.id from target
+    condition?: MappingCondition
+    transform?: MappingTransform
 }
 
 export interface FileData {

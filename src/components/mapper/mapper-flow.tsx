@@ -5,7 +5,7 @@ import { ConnectionLines } from "./connection-lines"
 import { FileUpload } from "./file-upload"
 import { TreeView } from "./tree-view"
 import { GenerateModal } from "./generate-modal"
-import type { DragData } from "@/lib/mapper/types"
+import type { DragData, MappingTransform } from "@/lib/mapper/types"
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -158,7 +158,7 @@ export function MapperFlow() {
                                         key={mapping.id}
                                         className="flex items-center justify-between px-4 py-2 rounded-full bg-muted/30 hover:bg-muted/50 transition-colors"
                                     >
-                                        <div className="flex items-center gap-2 text-sm font-mono">
+                                        <div className="flex items-center gap-2 text-sm font-mono flex-wrap">
                                             <span className="text-source">
                                                 {formatNodeId(mapping.sourceId)}
                                             </span>
@@ -166,6 +166,18 @@ export function MapperFlow() {
                                             <span className="text-target">
                                                 {formatNodeId(mapping.targetId)}
                                             </span>
+                                            {mapping.condition && (
+                                                <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium font-sans">
+                                                    IF {formatNodeId(mapping.condition.field)}{" "}
+                                                    {mapping.condition.operator}{" "}
+                                                    {mapping.condition.value}
+                                                </span>
+                                            )}
+                                            {mapping.transform && (
+                                                <span className="px-2 py-0.5 rounded-full bg-chart-5/15 text-chart-5 text-xs font-medium font-sans">
+                                                    {displayTransform(mapping.transform)}
+                                                </span>
+                                            )}
                                         </div>
                                         <Button
                                             variant="ghost"
@@ -200,4 +212,21 @@ export function MapperFlow() {
 function formatNodeId(id: string): string {
     // Remove "root." prefix for display
     return id.replace(/^root\.?/, "") || "root"
+}
+
+function displayTransform(t: MappingTransform): string {
+    switch (t.type) {
+        case "add":
+            return `+${t.value}`
+        case "subtract":
+            return `-${t.value}`
+        case "multiply":
+            return `*${t.value}`
+        case "divide":
+            return `/${t.value}`
+        case "add_percent":
+            return `+${t.value}%`
+        case "subtract_percent":
+            return `-${t.value}%`
+    }
 }

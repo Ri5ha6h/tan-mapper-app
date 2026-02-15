@@ -1,5 +1,5 @@
 import { XMLBuilder, XMLParser } from "fast-xml-parser"
-import type { Mapping, TreeNode } from "./types"
+import type { Mapping, MappingCondition, MappingTransform, TreeNode } from "./types"
 
 export interface EngineError {
     line?: number
@@ -79,6 +79,57 @@ function buildTargetTemplate(node: TreeNode | null): unknown {
     return result
 }
 
+export function evaluateCondition(sourceData: unknown, condition: MappingCondition): boolean {
+    const fieldValue = getValueAtPath(sourceData, condition.field)
+    if (fieldValue === undefined || fieldValue === null) return false
+
+    const condValue = condition.value
+    const fieldStr = String(fieldValue)
+
+    switch (condition.operator) {
+        case "==":
+            return fieldStr === condValue
+        case "!=":
+            return fieldStr !== condValue
+        case ">":
+            return Number(fieldValue) > Number(condValue)
+        case "<":
+            return Number(fieldValue) < Number(condValue)
+        case ">=":
+            return Number(fieldValue) >= Number(condValue)
+        case "<=":
+            return Number(fieldValue) <= Number(condValue)
+        case "contains":
+            return fieldStr.includes(condValue)
+        case "startsWith":
+            return fieldStr.startsWith(condValue)
+        case "endsWith":
+            return fieldStr.endsWith(condValue)
+        default:
+            return false
+    }
+}
+
+export function applyTransform(value: unknown, transform: MappingTransform): unknown {
+    const num = Number(value)
+    if (isNaN(num)) return value
+
+    switch (transform.type) {
+        case "add":
+            return num + transform.value
+        case "subtract":
+            return num - transform.value
+        case "multiply":
+            return num * transform.value
+        case "divide":
+            return transform.value !== 0 ? num / transform.value : num
+        case "add_percent":
+            return num * (1 + transform.value / 100)
+        case "subtract_percent":
+            return num * (1 - transform.value / 100)
+    }
+}
+
 export function applyMappings(
     sourceData: unknown,
     mappings: Array<Mapping>,
@@ -91,6 +142,10 @@ export function applyMappings(
         const sourcePath = mapping.sourceId.replace(/^root\.?/, "root.")
         const targetPath = mapping.targetId.replace(/^root\.?/, "root.")
 
+        if (mapping.condition) {
+            if (!evaluateCondition(sourceData, mapping.condition)) continue
+        }
+
         const sourceValue = getValueAtPath(sourceData, sourcePath)
 
         if (sourceValue === undefined) {
@@ -100,7 +155,9 @@ export function applyMappings(
             continue
         }
 
-        setValueAtPath(result, targetPath, sourceValue)
+        const finalValue = mapping.transform ? applyTransform(sourceValue, mapping.transform) : sourceValue
+
+        setValueAtPath(result, targetPath, finalValue)
     }
 
     return { result, errors }

@@ -1,13 +1,15 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
-import { resolve } from 'path'
 import { parseJSON } from '../parsers'
 import {
     applyMappings,
+    applyTransform,
+    evaluateCondition,
     generateJSONOutput,
     treeToData,
 } from '../engine'
-import type { Mapping } from '../types'
+import type { Mapping, MappingCondition, MappingTransform } from '../types'
 
 const samplesDir = resolve(__dirname, '../../../../BasicMapperTestingSamples')
 
@@ -147,6 +149,202 @@ describe('applyMappings', () => {
         const { errors } = applyMappings(sourceData, mappings, targetTemplate)
         expect(errors).toHaveLength(1)
         expect(errors[0].message).toContain('not found')
+    })
+})
+
+describe('evaluateCondition', () => {
+    const sourceData = {
+        name: 'Laptop',
+        price: 900,
+        category: 'Electronics',
+    }
+
+    it('evaluates == with matching string', () => {
+        const cond: MappingCondition = { field: 'root.name', operator: '==', value: 'Laptop' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates == with non-matching string', () => {
+        const cond: MappingCondition = { field: 'root.name', operator: '==', value: 'Phone' }
+        expect(evaluateCondition(sourceData, cond)).toBe(false)
+    })
+
+    it('evaluates != operator', () => {
+        const cond: MappingCondition = { field: 'root.name', operator: '!=', value: 'Phone' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates > with numbers', () => {
+        const cond: MappingCondition = { field: 'root.price', operator: '>', value: '500' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates < with numbers', () => {
+        const cond: MappingCondition = { field: 'root.price', operator: '<', value: '500' }
+        expect(evaluateCondition(sourceData, cond)).toBe(false)
+    })
+
+    it('evaluates >= with numbers', () => {
+        const cond: MappingCondition = { field: 'root.price', operator: '>=', value: '900' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates <= with numbers', () => {
+        const cond: MappingCondition = { field: 'root.price', operator: '<=', value: '900' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates contains', () => {
+        const cond: MappingCondition = { field: 'root.name', operator: 'contains', value: 'apt' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates startsWith', () => {
+        const cond: MappingCondition = { field: 'root.name', operator: 'startsWith', value: 'Lap' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('evaluates endsWith', () => {
+        const cond: MappingCondition = { field: 'root.name', operator: 'endsWith', value: 'top' }
+        expect(evaluateCondition(sourceData, cond)).toBe(true)
+    })
+
+    it('returns false for missing field', () => {
+        const cond: MappingCondition = { field: 'root.missing', operator: '==', value: 'x' }
+        expect(evaluateCondition(sourceData, cond)).toBe(false)
+    })
+
+    it('returns false for null field', () => {
+        const data = { value: null }
+        const cond: MappingCondition = { field: 'root.value', operator: '==', value: 'x' }
+        expect(evaluateCondition(data, cond)).toBe(false)
+    })
+})
+
+describe('applyTransform', () => {
+    it('adds a number', () => {
+        expect(applyTransform(100, { type: 'add', value: 50 })).toBe(150)
+    })
+
+    it('subtracts a number', () => {
+        expect(applyTransform(100, { type: 'subtract', value: 30 })).toBe(70)
+    })
+
+    it('multiplies a number', () => {
+        expect(applyTransform(100, { type: 'multiply', value: 1.5 })).toBe(150)
+    })
+
+    it('divides a number', () => {
+        expect(applyTransform(100, { type: 'divide', value: 4 })).toBe(25)
+    })
+
+    it('does not divide by zero', () => {
+        expect(applyTransform(100, { type: 'divide', value: 0 })).toBe(100)
+    })
+
+    it('adds a percentage', () => {
+        expect(applyTransform(100, { type: 'add_percent', value: 5 })).toBe(105)
+    })
+
+    it('subtracts a percentage', () => {
+        expect(applyTransform(200, { type: 'subtract_percent', value: 10 })).toBe(180)
+    })
+
+    it('returns non-numeric value as-is', () => {
+        expect(applyTransform('hello', { type: 'add', value: 5 })).toBe('hello')
+    })
+
+    it('handles string numbers', () => {
+        expect(applyTransform('100', { type: 'add', value: 50 })).toBe(150)
+    })
+})
+
+describe('applyMappings - with conditions and transforms', () => {
+    it('skips mapping when condition is not met', () => {
+        const sourceData = { price: 30 }
+        const targetTemplate = { cost: 0 }
+
+        const mappings: Array<Mapping> = [
+            {
+                id: 'm1',
+                sourceId: 'root.price',
+                targetId: 'root.cost',
+                condition: { field: 'root.price', operator: '>', value: '50' },
+            },
+        ]
+
+        const { result } = applyMappings(sourceData, mappings, targetTemplate)
+        expect((result as Record<string, unknown>).cost).toBe(0) // not mapped
+    })
+
+    it('applies mapping when condition is met', () => {
+        const sourceData = { price: 100 }
+        const targetTemplate = { cost: 0 }
+
+        const mappings: Array<Mapping> = [
+            {
+                id: 'm1',
+                sourceId: 'root.price',
+                targetId: 'root.cost',
+                condition: { field: 'root.price', operator: '>', value: '50' },
+            },
+        ]
+
+        const { result } = applyMappings(sourceData, mappings, targetTemplate)
+        expect((result as Record<string, unknown>).cost).toBe(100)
+    })
+
+    it('applies transform to mapped value', () => {
+        const sourceData = { price: 100 }
+        const targetTemplate = { cost: 0 }
+
+        const mappings: Array<Mapping> = [
+            {
+                id: 'm1',
+                sourceId: 'root.price',
+                targetId: 'root.cost',
+                transform: { type: 'add_percent', value: 5 },
+            },
+        ]
+
+        const { result } = applyMappings(sourceData, mappings, targetTemplate)
+        expect((result as Record<string, unknown>).cost).toBe(105)
+    })
+
+    it('applies condition + transform together', () => {
+        const sourceData = { price: 100 }
+        const targetTemplate = { cost: 0 }
+
+        const mappings: Array<Mapping> = [
+            {
+                id: 'm1',
+                sourceId: 'root.price',
+                targetId: 'root.cost',
+                condition: { field: 'root.price', operator: '>', value: '40' },
+                transform: { type: 'add_percent', value: 5 },
+            },
+        ]
+
+        const { result } = applyMappings(sourceData, mappings, targetTemplate)
+        expect((result as Record<string, unknown>).cost).toBe(105)
+    })
+
+    it('skips condition + transform when condition fails', () => {
+        const sourceData = { price: 20 }
+        const targetTemplate = { cost: 0 }
+
+        const mappings: Array<Mapping> = [
+            {
+                id: 'm1',
+                sourceId: 'root.price',
+                targetId: 'root.cost',
+                condition: { field: 'root.price', operator: '>', value: '40' },
+                transform: { type: 'add_percent', value: 5 },
+            },
+        ]
+
+        const { result } = applyMappings(sourceData, mappings, targetTemplate)
+        expect((result as Record<string, unknown>).cost).toBe(0) // not mapped
     })
 })
 
