@@ -1,0 +1,36 @@
+Implement the following plan:
+
+# Plan: Create CLAUDE.md
+
+## Context
+The repository has no existing CLAUDE.md, cursor rules, or copilot instructions. The README is a minimal template description. A CLAUDE.md needs to be created to help future Claude Code instances quickly understand this TanStack Start application.
+
+## Action
+Create `CLAUDE.md` at the project root with the following content:
+
+### Sections to include:
+1. **Development Commands** — dev (port 4008), build, test, lint, format, check commands using bun
+2. **Tech Stack** — TanStack Start + React 19 + Vite 7 + Tailwind CSS v4 + shadcn/ui (base-maia style with Base UI headless components)
+3. **Architecture** — File-based routing via TanStack Router, route files in `src/routes/`, UI components in `src/components/ui/`, shared utils in `src/lib/`
+4. **Key Conventions** — Path alias `@/*` → `src/*`, no semicolons/single quotes (Prettier), `cn()` utility for class merging, component variant pattern with CVA, `data-slot` attributes on components, compound component pattern (e.g. Select.Root/Trigger/Content)
+5. **Adding UI Components** — `bunx shadcn add <component>` (base-maia style, non-RSC)
+
+### Files to create/modify:
+- **Create**: `/Users/kakarot/Self/Sandbox/tan-mapper-app/CLAUDE.md`
+
+## Verification
+- Read the created file to confirm accuracy
+- Ensure no duplicated or generic content
+
+
+If you need specific details from before exiting plan mode (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/kakarot/.claude/projects/-Users-kakarot-Self-Sandbox-tan-mapper-app/a0b5652f-0dab-4270-a01d-52a7e6b7c0ab.jsonl
+
+If this plan can be broken down into multiple independent tasks, consider using the TeamCreate tool to create a team and parallelize the work.
+
+---
+
+Get latest updates on Tanstack start from its docs and update the @CLAUDE.md file accordingly, so that we can ensure we'll use correct tanstack start practices for project.
+
+---
+
+[Request interrupted by user for tool use]
