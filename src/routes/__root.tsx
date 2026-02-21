@@ -1,8 +1,9 @@
-import { HeadContent, Link, Outlet, Scripts, createRootRoute  } from "@tanstack/react-router"
+import { HeadContent, Link, Outlet, Scripts, createRootRoute } from "@tanstack/react-router"
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools"
 import { TanStackDevtools } from "@tanstack/react-devtools"
 
 import appCss from "../styles.css?url"
+import { NotFound } from "@/components/not-found"
 import { cn } from "@/lib/utils"
 
 export const Route = createRootRoute({
@@ -33,6 +34,7 @@ export const Route = createRootRoute({
 
     component: RootLayout,
     shellComponent: RootDocument,
+    notFoundComponent: NotFound,
 })
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
