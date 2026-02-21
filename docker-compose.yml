@@ -16,6 +16,39 @@ services:
             interval: 5s
             timeout: 5s
             retries: 5
+        networks:
+            - db-net
+
+    groovy-sidecar:
+        build:
+            context: ./groovy-sidecar
+            dockerfile: Dockerfile
+        container_name: tan-mapper-groovy
+        restart: unless-stopped
+        ports:
+            - "8090:8090"
+        environment:
+            JAVA_OPTS: "-Xmx512m -Xms128m"
+        deploy:
+            resources:
+                limits:
+                    memory: 512M
+        healthcheck:
+            test: ["CMD", "curl", "-sf", "http://localhost:8090/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+        networks:
+            - groovy-net
+        # Only start when explicitly requested via --profile groovy
+        profiles:
+            - groovy
 
 volumes:
     pgdata:
+
+networks:
+    db-net:
+        driver: bridge
+    groovy-net:
+        driver: bridge

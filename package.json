@@ -14,7 +14,10 @@
         "db:migrate": "drizzle-kit migrate",
         "db:studio": "drizzle-kit studio",
         "docker:up": "docker compose up -d",
-        "docker:down": "docker compose down"
+        "docker:down": "docker compose down",
+        "groovy:up": "docker compose --profile groovy up -d",
+        "groovy:down": "docker compose --profile groovy down",
+        "groovy:logs": "docker logs -f tan-mapper-groovy"
     },
     "dependencies": {
         "@base-ui/react": "^1.2.0",
