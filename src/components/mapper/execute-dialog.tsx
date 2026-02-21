@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select"
 import { detectTemplateType, executeScript, generateScript } from "@/lib/mapper/engine"
 import { useMapperStore } from "@/lib/mapper/store"
+import { treeToSample } from "@/lib/mapper/tree-to-sample"
 import { cn } from "@/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -170,7 +171,10 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
     const state = useMapperStore((s) => s.mapperState)
 
     const [templateType, setTemplateType] = useState<TemplateType>(() => resolveTemplateType(state))
-    const [inputText, setInputText] = useState("")
+    const [inputText, setInputText] = useState(() => {
+        const lang = resolveTemplateType(state).startsWith("xml") ? "xml" : "json"
+        return treeToSample(state.sourceTreeNode, lang)
+    })
     const [scriptText, setScriptText] = useState("")
     const [outputText, setOutputText] = useState("")
     const [scriptPaneVisible, setScriptPaneVisible] = useState(false)
@@ -186,6 +190,16 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
             prevStateRef.current = state
         }
     }, [state])
+
+    // Re-populate input from source tree when the dialog opens or source tree changes
+    useEffect(() => {
+        if (open) {
+            const lang = templateType.startsWith("xml") ? "xml" : "json"
+            const sample = treeToSample(state.sourceTreeNode, lang)
+            setInputText(sample)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open, state.sourceTreeNode])
 
     // Sync template type when state's input types change
     useEffect(() => {
