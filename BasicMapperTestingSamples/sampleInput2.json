@@ -1,9 +1,0 @@
-{
-    "order_id": "ORD001",
-    "customer": {
-        "name": "John Doe",
-        "email": "john@example.com"
-    },
-    "total": 500,
-    "currency": "USD"
-}
