@@ -1,4 +1,5 @@
 import { XMLBuilder, XMLParser } from "fast-xml-parser"
+import { getGroovyShimParamNames, getGroovyShimParamValues } from "./groovy-shims"
 import { findNodeById, getFullPath, traverseDown } from "./node-utils"
 import type {
     LoopCondition,
@@ -844,16 +845,26 @@ export function generateScript(
 // Phase 6 — executeScript
 // ============================================================
 
+export interface ExecuteScriptOptions {
+    /** When true, inject Groovy shim functions into the script scope */
+    injectGroovyShims?: boolean
+}
+
 /**
  * Executes a generated script string against input data.
  * Returns {output, error} — never throws.
  * Declared async to allow future async execution (e.g. web workers, sandboxing).
+ *
+ * When `options.injectGroovyShims` is true, all Groovy shim functions
+ * (createDateFormatter, roundTo, chunkArray, getText, etc.) are injected
+ * as additional parameters into the script's scope.
  */
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function executeScript(
     scriptBody: string,
     input: string,
     _context: MapperContext,
+    options?: ExecuteScriptOptions,
 ): Promise<ScriptExecutionResult> {
     const start = performance.now()
     const capturedLogs: string[] = []
@@ -887,11 +898,33 @@ export async function executeScript(
         const fullScript = `"use strict";\n${scriptBody}`
 
         // new Function creates a function in global scope (not module scope)
-        // We pass 'input', 'parseXML', and 'toXML' as parameters
+        // We pass 'input', 'parseXML', and 'toXML' as base parameters
+        const baseParamNames = ["input", "parseXML", "toXML"]
+        const baseParamValues: unknown[] = [input, parseXMLInput, generateXMLOutput]
 
-        const fn = new Function("input", "parseXML", "toXML", fullScript)
+        // When running transpiled Groovy code, inject shim functions as
+        // additional named parameters so they're available in scope
+        if (options?.injectGroovyShims) {
+            const shimNames = getGroovyShimParamNames()
+            const shimValues = getGroovyShimParamValues()
+            const allParamNames = [...baseParamNames, ...shimNames]
+            const allParamValues = [...baseParamValues, ...shimValues]
 
-        const result = fn(input, parseXMLInput, generateXMLOutput)
+            const fn = new Function(...allParamNames, fullScript)
+            const result = fn(...allParamValues)
+            const output = result != null ? String(result) : ""
+
+            return {
+                output,
+                error: null,
+                scriptBody,
+                durationMs: performance.now() - start,
+                logs: capturedLogs,
+            }
+        }
+
+        const fn = new Function(...baseParamNames, fullScript)
+        const result = fn(...baseParamValues)
 
         const output = result != null ? String(result) : ""
 
