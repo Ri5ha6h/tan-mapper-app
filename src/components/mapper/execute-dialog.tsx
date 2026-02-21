@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import MonacoEditor from "@monaco-editor/react"
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Play } from "lucide-react"
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Play, RotateCcw } from "lucide-react"
 
 import type { TemplateType } from "@/lib/mapper/engine"
 import type { MapperState } from "@/lib/mapper/types"
@@ -118,16 +118,37 @@ function PaneHeader({ label, type, side }: PaneHeaderProps) {
 
 interface ScriptPaneHeaderProps {
     visible: boolean
+    isModified: boolean
     onToggle: () => void
+    onReset: () => void
 }
 
-function ScriptPaneHeader({ visible, onToggle }: ScriptPaneHeaderProps) {
+function ScriptPaneHeader({ visible, isModified, onToggle, onReset }: ScriptPaneHeaderProps) {
     return (
-        <div className="shrink-0 px-2 py-1.5 flex items-center justify-between border-b border-glass-border bg-glass-bg/50">
+        <div className="shrink-0 px-2 py-1.5 flex items-center justify-between gap-1 border-b border-glass-border bg-glass-bg/50">
             {visible && (
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
-                    Generated Script
-                </span>
+                <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide whitespace-nowrap">
+                        Generated Script
+                    </span>
+                    {isModified && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary border border-primary/30 whitespace-nowrap">
+                            Modified
+                        </span>
+                    )}
+                    {isModified && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-1.5 rounded-full text-[10px] text-muted-foreground hover:text-foreground gap-0.5"
+                            onClick={onReset}
+                            title="Regenerate script from mapper state"
+                        >
+                            <RotateCcw className="h-2.5 w-2.5" />
+                            Reset
+                        </Button>
+                    )}
+                </div>
             )}
             <Button
                 variant="ghost"
@@ -172,10 +193,12 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
 
     const [templateType, setTemplateType] = useState<TemplateType>(() => resolveTemplateType(state))
     const [inputText, setInputText] = useState(() => {
+        if (state.sourceOriginalContent) return state.sourceOriginalContent
         const lang = resolveTemplateType(state).startsWith("xml") ? "xml" : "json"
         return treeToSample(state.sourceTreeNode, lang)
     })
     const [scriptText, setScriptText] = useState("")
+    const [isScriptModified, setIsScriptModified] = useState(false)
     const [outputText, setOutputText] = useState("")
     const [scriptPaneVisible, setScriptPaneVisible] = useState(false)
     const [isRunning, setIsRunning] = useState(false)
@@ -187,19 +210,24 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
         if (state !== prevStateRef.current) {
             // Invalidate cached script when mapper state changes
             setScriptText("")
+            setIsScriptModified(false)
             prevStateRef.current = state
         }
     }, [state])
 
-    // Re-populate input from source tree when the dialog opens or source tree changes
+    // Re-populate input from source tree (or original file content) when the dialog opens or source tree changes
     useEffect(() => {
         if (open) {
-            const lang = templateType.startsWith("xml") ? "xml" : "json"
-            const sample = treeToSample(state.sourceTreeNode, lang)
-            setInputText(sample)
+            if (state.sourceOriginalContent) {
+                setInputText(state.sourceOriginalContent)
+            } else {
+                const lang = templateType.startsWith("xml") ? "xml" : "json"
+                const sample = treeToSample(state.sourceTreeNode, lang)
+                setInputText(sample)
+            }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, state.sourceTreeNode])
+    }, [open, state.sourceTreeNode, state.sourceOriginalContent])
 
     // Sync template type when state's input types change
     useEffect(() => {
@@ -218,8 +246,23 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
         try {
             const script = generateScript(state, srcType, tgtType)
             setScriptText(script)
+            setIsScriptModified(false)
             setScriptPaneVisible(true)
             setStatus({ type: "idle", message: "Script generated" })
+        } catch (err) {
+            setStatus({
+                type: "error",
+                message: err instanceof Error ? err.message : "Script generation failed",
+            })
+        }
+    }
+
+    function handleResetScript() {
+        try {
+            const script = generateScript(state, srcType, tgtType)
+            setScriptText(script)
+            setIsScriptModified(false)
+            setStatus({ type: "idle", message: "Script regenerated" })
         } catch (err) {
             setStatus({
                 type: "error",
@@ -240,11 +283,13 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
         setOutputText("")
 
         try {
-            // Generate script if not already generated or if state changed
+            // Use whatever is currently in the script editor (hand-edited or auto-generated)
+            // Only auto-generate if no script exists yet
             let script = scriptText
             if (!script) {
                 script = generateScript(state, srcType, tgtType)
                 setScriptText(script)
+                setIsScriptModified(false)
             }
 
             const result = await executeScript(script, input, state.localContext)
@@ -373,7 +418,9 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
                     >
                         <ScriptPaneHeader
                             visible={scriptPaneVisible}
+                            isModified={isScriptModified}
                             onToggle={() => setScriptPaneVisible((v) => !v)}
+                            onReset={handleResetScript}
                         />
                         {scriptPaneVisible && (
                             <div className="flex-1 min-h-0">
@@ -382,7 +429,11 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
                                     theme="vs-dark"
                                     language="javascript"
                                     value={scriptText}
-                                    options={readonlyEditorOptions}
+                                    onChange={(v) => {
+                                        setScriptText(v ?? "")
+                                        setIsScriptModified(true)
+                                    }}
+                                    options={editorOptions}
                                 />
                             </div>
                         )}

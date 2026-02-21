@@ -97,6 +97,7 @@ export interface MapperStore extends SelectionState, UndoRedoState, ClipboardSta
         newRoot: MapperTreeNode,
         inputType: InputType,
         applyMethod: ApplyMethod,
+        originalContent?: string | null,
     ) => void
     applyTargetModel: (
         newRoot: MapperTreeNode,
@@ -104,7 +105,12 @@ export interface MapperStore extends SelectionState, UndoRedoState, ClipboardSta
         applyMethod: ApplyMethod,
     ) => void
 
-    addChildNode: (parentId: string, side: "source" | "target", type: MapperNodeType) => void
+    addChildNode: (
+        parentId: string,
+        side: "source" | "target",
+        type: MapperNodeType,
+        name: string,
+    ) => void
     deleteNodes: (nodeIds: string[], side: "source" | "target") => void
     updateNodeFields: (
         nodeId: string,
@@ -433,9 +439,14 @@ export const useMapperStore = create<MapperStore>()(
                 newRoot: MapperTreeNode,
                 inputType: InputType,
                 applyMethod: ApplyMethod,
+                originalContent?: string | null,
             ) => {
                 set((state) => {
                     const existing = state.mapperState.sourceTreeNode
+                    // Store the raw uploaded file content for use in Execute dialog
+                    if (originalContent !== undefined) {
+                        state.mapperState.sourceOriginalContent = originalContent
+                    }
                     if (applyMethod === "REPLACE") {
                         state.mapperState.sourceTreeNode = newRoot
                         state.mapperState.sourceInputType = inputType
@@ -540,7 +551,12 @@ export const useMapperStore = create<MapperStore>()(
                 })
             },
 
-            addChildNode: (parentId: string, side: "source" | "target", type: MapperNodeType) => {
+            addChildNode: (
+                parentId: string,
+                side: "source" | "target",
+                type: MapperNodeType,
+                name: string,
+            ) => {
                 set((state) => {
                     const tree =
                         side === "source"
@@ -550,7 +566,7 @@ export const useMapperStore = create<MapperStore>()(
 
                     const newNode: MapperTreeNode = {
                         id: uuidv4(),
-                        name: "newNode",
+                        name,
                         type,
                     }
                     const updated = insertChild(tree, parentId, newNode)

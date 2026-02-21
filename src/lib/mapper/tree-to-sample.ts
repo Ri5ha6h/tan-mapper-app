@@ -26,7 +26,8 @@ function childrenToObject(children: MapperTreeNode[] | undefined): Record<string
         } else if (child.children && child.children.length > 0) {
             obj[key] = childrenToObject(child.children) ?? {}
         } else {
-            obj[key] = ""
+            // Use parsed sample value if available, otherwise empty string
+            obj[key] = child.sampleValue ?? ""
         }
     }
 
@@ -77,10 +78,10 @@ function nodeToXml(node: MapperTreeNode, depth: number): string {
     const attrChildren = (node.children ?? []).filter((c) => c.type === "attribute")
     const elemChildren = (node.children ?? []).filter((c) => c.type !== "attribute")
 
-    const attrStr = attrChildren.map((a) => ` ${a.name || a.id}=""`).join("")
+    const attrStr = attrChildren.map((a) => ` ${a.name || a.id}="${a.sampleValue ?? ""}"`).join("")
 
     if (elemChildren.length === 0) {
-        return `${ind}<${tag}${attrStr}></${tag}>`
+        return `${ind}<${tag}${attrStr}>${node.sampleValue ?? ""}</${tag}>`
     }
 
     const childLines = elemChildren.map((c) => nodeToXml(c, depth + 1)).filter(Boolean)

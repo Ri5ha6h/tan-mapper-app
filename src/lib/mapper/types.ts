@@ -129,6 +129,8 @@ export interface MapperTreeNode {
     // Value
     value?: string // Static value or expression string
     plainTextValue?: boolean // true = value is a literal string; false = expression
+    customCode?: string // Custom JS code block shown in the collapsible code editor in Value tab
+    sampleValue?: string // Display-only: leaf value from the parsed source file (not used in script generation)
 
     // Source references (TARGET TREE ONLY — empty/absent on source nodes)
     sourceReferences?: SourceReference[]
@@ -227,4 +229,7 @@ export interface MapperState {
 
     sourceInputType: InputType
     targetInputType: InputType
+
+    // Raw text of the uploaded source file — used to pre-populate the Execute dialog input
+    sourceOriginalContent?: string | null
 }

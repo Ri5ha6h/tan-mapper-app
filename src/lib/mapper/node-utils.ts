@@ -255,6 +255,10 @@ export function fromParserTreeNode(node: TreeNode): MapperTreeNode {
         name: node.key,
         type: typeMap[node.type] ?? "element",
     }
+    // Preserve parsed leaf value for display purposes (e.g. showing actual data alongside field names)
+    if (node.value !== undefined) {
+        mapperNode.sampleValue = node.value
+    }
     if (node.children && node.children.length > 0) {
         mapperNode.children = node.children.map(fromParserTreeNode)
     }

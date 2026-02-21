@@ -2,6 +2,7 @@ import { Plus } from "lucide-react"
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuGroup,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
@@ -56,7 +57,7 @@ export function InsertValueMenu({ onInsert }: InsertValueMenuProps) {
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                                 {globalVars.map((v) => (
-                                    <DropdownMenuItem key={v.id} onSelect={() => onInsert(v.name)}>
+                                    <DropdownMenuItem key={v.id} onClick={() => onInsert(v.name)}>
                                         <span className="font-mono text-xs text-primary">
                                             {v.name}
                                         </span>
@@ -86,7 +87,7 @@ export function InsertValueMenu({ onInsert }: InsertValueMenuProps) {
                                 {lookupTables.map((t) => (
                                     <DropdownMenuItem
                                         key={t.id}
-                                        onSelect={() => onInsert(`lookupTable('${t.name}', value)`)}
+                                        onClick={() => onInsert(`lookupTable('${t.name}', value)`)}
                                     >
                                         <span className="font-mono text-xs text-accent">
                                             {t.name}
@@ -112,7 +113,7 @@ export function InsertValueMenu({ onInsert }: InsertValueMenuProps) {
                                 {functions.map((f) => (
                                     <DropdownMenuItem
                                         key={f.id}
-                                        onSelect={() => onInsert(`${f.name}()`)}
+                                        onClick={() => onInsert(`${f.name}()`)}
                                     >
                                         <span className="font-mono text-xs text-secondary">
                                             {f.name}()
@@ -134,7 +135,7 @@ export function InsertValueMenu({ onInsert }: InsertValueMenuProps) {
                     </DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                         {SYSTEM_VARIABLES.map((sv) => (
-                            <DropdownMenuItem key={sv.label} onSelect={() => onInsert(sv.value)}>
+                            <DropdownMenuItem key={sv.label} onClick={() => onInsert(sv.value)}>
                                 <span className="font-mono text-xs text-muted-foreground">
                                     {sv.label}
                                 </span>
@@ -147,17 +148,19 @@ export function InsertValueMenu({ onInsert }: InsertValueMenuProps) {
                 {sourceRefs.length > 0 && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuLabel>Source References</DropdownMenuLabel>
-                        {sourceRefs.map((ref) => (
-                            <DropdownMenuItem
-                                key={ref.id}
-                                onSelect={() => onInsert(ref.variableName)}
-                            >
-                                <span className="font-mono text-xs text-mapped">
-                                    {ref.variableName}
-                                </span>
-                            </DropdownMenuItem>
-                        ))}
+                        <DropdownMenuGroup>
+                            <DropdownMenuLabel>Source References</DropdownMenuLabel>
+                            {sourceRefs.map((ref) => (
+                                <DropdownMenuItem
+                                    key={ref.id}
+                                    onClick={() => onInsert(ref.variableName)}
+                                >
+                                    <span className="font-mono text-xs text-mapped">
+                                        {ref.variableName}
+                                    </span>
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuGroup>
                     </>
                 )}
             </DropdownMenuContent>

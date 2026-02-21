@@ -1,10 +1,12 @@
 import { useState, useRef, useCallback } from "react"
 import Editor from "@monaco-editor/react"
+import { ChevronDown, ChevronRight, Code2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { useMapperStore } from "@/lib/mapper/store"
 import { InsertValueMenu } from "./insert-value-menu"
+import { cn } from "@/lib/utils"
 import type { MapperTreeNode } from "@/lib/mapper/types"
 
 interface ValueEditorProps {
@@ -53,6 +55,8 @@ export function ValueEditor({ node }: ValueEditorProps) {
     const [format, setFormat] = useState(node.format ?? "")
     const [label, setLabel] = useState(node.label ?? "")
     const [errorMessage, setErrorMessage] = useState(node.errorMessage ?? "")
+    const [customCode, setCustomCode] = useState(node.customCode ?? "")
+    const [codeExpanded, setCodeExpanded] = useState(!!node.customCode)
 
     // Snapshot guard — only snapshot once per editing "session" on a node
     const hasSnapshotted = useRef(false)
@@ -78,6 +82,8 @@ export function ValueEditor({ node }: ValueEditorProps) {
         setFormat(node.format ?? "")
         setLabel(node.label ?? "")
         setErrorMessage(node.errorMessage ?? "")
+        setCustomCode(node.customCode ?? "")
+        setCodeExpanded(!!node.customCode)
     }
 
     const handleInsert = (text: string) => {
@@ -234,6 +240,61 @@ export function ValueEditor({ node }: ValueEditorProps) {
                         updateTargetNode(node.id, { errorMessage: e.target.value })
                     }}
                 />
+            </div>
+
+            {/* Custom Code editor (collapsible) */}
+            <div className="flex flex-col gap-1">
+                <button
+                    type="button"
+                    onClick={() => setCodeExpanded((v) => !v)}
+                    className={cn(
+                        "flex items-center gap-1.5 text-xs font-medium transition-colors select-none",
+                        codeExpanded
+                            ? "text-primary"
+                            : "text-muted-foreground hover:text-foreground",
+                    )}
+                >
+                    {codeExpanded ? (
+                        <ChevronDown className="h-3.5 w-3.5" />
+                    ) : (
+                        <ChevronRight className="h-3.5 w-3.5" />
+                    )}
+                    <Code2 className="h-3.5 w-3.5" />
+                    Custom Code
+                    {customCode && !codeExpanded && (
+                        <span className="ml-1 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                    )}
+                </button>
+
+                {codeExpanded && (
+                    <div
+                        className="rounded-xl overflow-hidden border border-glass-border"
+                        style={{ height: 160 }}
+                    >
+                        <Editor
+                            height="160px"
+                            defaultLanguage="javascript"
+                            value={customCode}
+                            theme="vs-dark"
+                            options={{
+                                fontSize: 12,
+                                minimap: { enabled: false },
+                                lineNumbers: "on",
+                                scrollBeyondLastLine: false,
+                                padding: { top: 6, bottom: 6 },
+                                folding: false,
+                                wordWrap: "on",
+                                fontFamily: "Geist Mono Variable, monospace",
+                            }}
+                            onChange={(v) => {
+                                ensureSnapshot()
+                                const newVal = v ?? ""
+                                setCustomCode(newVal)
+                                updateTargetNode(node.id, { customCode: newVal })
+                            }}
+                        />
+                    </div>
+                )}
             </div>
         </div>
     )

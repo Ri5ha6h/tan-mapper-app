@@ -237,7 +237,7 @@ interface FileUploadStepProps {
     side: "source" | "target"
     resultRoot: MapperTreeNode | null
     resultType: InputType | null
-    onFileParsed: (root: MapperTreeNode, type: InputType) => void
+    onFileParsed: (root: MapperTreeNode, type: InputType, rawContent: string) => void
 }
 
 function FileUploadStep({ side, resultRoot, resultType, onFileParsed }: FileUploadStepProps) {
@@ -275,7 +275,7 @@ function FileUploadStep({ side, resultRoot, resultType, onFileParsed }: FileUplo
             }
 
             setFileName(file.name)
-            onFileParsed(parsedRoot, detectedType)
+            onFileParsed(parsedRoot, detectedType, text)
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to parse file."
             setParseError(`Parse error: ${message}`)
@@ -471,6 +471,7 @@ export function UploadModelDialog({ open, onClose, side }: UploadModelDialogProp
     const [step, setStep] = React.useState<Step>(1)
     const [resultRoot, setResultRoot] = React.useState<MapperTreeNode | null>(null)
     const [resultType, setResultType] = React.useState<InputType | null>(null)
+    const [resultRawContent, setResultRawContent] = React.useState<string | null>(null)
     const [applyMethod, setApplyMethod] = React.useState<ApplyMethod>("REPLACE")
 
     const applySourceModel = useMapperStore((s) => s.applySourceModel)
@@ -483,13 +484,15 @@ export function UploadModelDialog({ open, onClose, side }: UploadModelDialogProp
             setStep(1)
             setResultRoot(null)
             setResultType(null)
+            setResultRawContent(null)
             setApplyMethod("REPLACE")
         }
     }, [open])
 
-    function handleFileParsed(root: MapperTreeNode, type: InputType) {
+    function handleFileParsed(root: MapperTreeNode, type: InputType, rawContent: string) {
         setResultRoot(root)
         setResultType(type)
+        setResultRawContent(rawContent)
         setStep(3)
     }
 
@@ -507,7 +510,7 @@ export function UploadModelDialog({ open, onClose, side }: UploadModelDialogProp
 
         snapshot()
         if (side === "source") {
-            applySourceModel(resultRoot, resultType, applyMethod)
+            applySourceModel(resultRoot, resultType, applyMethod, resultRawContent)
         } else {
             applyTargetModel(resultRoot, resultType, applyMethod)
         }

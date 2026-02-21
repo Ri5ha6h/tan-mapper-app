@@ -636,6 +636,13 @@ function generateTargetNode(
         }
     }
 
+    // 3d. Custom code block (injected verbatim before value assignment)
+    if (node.customCode?.trim()) {
+        for (const codeLine of node.customCode.trim().split("\n")) {
+            lines.push(indent + codeLine)
+        }
+    }
+
     // 4. Set value on this node (leaf assignment)
     const valueExpr = buildValueExpression(node)
     if (valueExpr !== null && node.type !== "array" && node.type !== "arrayChild") {
