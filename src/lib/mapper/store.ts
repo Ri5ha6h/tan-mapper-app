@@ -68,8 +68,11 @@ interface ClipboardState {
 
 interface UIState {
     isDirty: boolean
+    isSaving: boolean
+    saveError: string | null
+    lastSavedAt: string | null
     currentResourceName: string | null
-    currentResourceId: string | null // localStorage key or future server ID
+    currentResourceId: string | null
     isExecutePanelOpen: boolean
     isDSLMode: boolean // true = show DSL panel; false = show visual tree panel
 }
@@ -212,6 +215,9 @@ export interface MapperStore extends SelectionState, UndoRedoState, ClipboardSta
 
     // ─── UI state ──────────────────────────────────────────────────────────────
     setDirty: (dirty: boolean) => void
+    setSaving: (saving: boolean) => void
+    setSaveError: (error: string | null) => void
+    setLastSavedAt: (at: string | null) => void
     setResourceName: (name: string | null) => void
     setResourceId: (id: string | null) => void
     toggleExecutePanel: () => void
@@ -355,6 +361,9 @@ export const useMapperStore = create<MapperStore>()(
             selectedSourceNodeId: null,
             selectedTargetNodeId: null,
             isDirty: false,
+            isSaving: false,
+            saveError: null,
+            lastSavedAt: null,
             currentResourceName: null,
             currentResourceId: null,
             isExecutePanelOpen: false,
@@ -404,6 +413,8 @@ export const useMapperStore = create<MapperStore>()(
                     state.undoStack = []
                     state.redoStack = []
                     state.isDirty = false
+                    state.isSaving = false
+                    state.saveError = null
                     state.selectedSourceNodeId = null
                     state.selectedTargetNodeId = null
                     if (name !== undefined) state.currentResourceName = name ?? null
@@ -424,6 +435,9 @@ export const useMapperStore = create<MapperStore>()(
                     state.undoStack = []
                     state.redoStack = []
                     state.isDirty = false
+                    state.isSaving = false
+                    state.saveError = null
+                    state.lastSavedAt = null
                     state.selectedSourceNodeId = null
                     state.selectedTargetNodeId = null
                     state.currentResourceName = null
@@ -1412,6 +1426,24 @@ export const useMapperStore = create<MapperStore>()(
                 })
             },
 
+            setSaving: (saving: boolean) => {
+                set((state) => {
+                    state.isSaving = saving
+                })
+            },
+
+            setSaveError: (error: string | null) => {
+                set((state) => {
+                    state.saveError = error
+                })
+            },
+
+            setLastSavedAt: (at: string | null) => {
+                set((state) => {
+                    state.lastSavedAt = at
+                })
+            },
+
             setResourceName: (name: string | null) => {
                 set((state) => {
                     state.currentResourceName = name
@@ -1457,3 +1489,5 @@ export const useSelectedTargetNode = () =>
 export const useCanUndo = () => useMapperStore((s) => s.canUndo())
 export const useCanRedo = () => useMapperStore((s) => s.canRedo())
 export const useIsDirty = () => useMapperStore((s) => s.isDirty)
+export const useIsSaving = () => useMapperStore((s) => s.isSaving)
+export const useSaveError = () => useMapperStore((s) => s.saveError)

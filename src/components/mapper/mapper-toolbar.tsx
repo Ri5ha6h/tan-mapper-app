@@ -3,6 +3,7 @@ import {
     Download,
     FilePlus2,
     FolderOpen,
+    Loader2,
     Play,
     Redo2,
     Save,
@@ -20,9 +21,10 @@ import { OpenMapDialog } from "./open-map-dialog"
 import { SaveAsDialog } from "./save-as-dialog"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { useCanRedo, useCanUndo, useIsDirty, useMapperStore } from "@/lib/mapper/store"
+import { useCanRedo, useCanUndo, useIsDirty, useIsSaving, useMapperStore } from "@/lib/mapper/store"
 import { downloadAsExcel } from "@/lib/mapper/excel-export"
-import { downloadAsJtmap, saveToLocal } from "@/lib/mapper/persistence"
+import { countNodes, downloadAsJtmap } from "@/lib/mapper/persistence"
+import { saveMap } from "@/lib/mapper/persistence.server"
 import { cn } from "@/lib/utils"
 
 interface MapperToolbarProps {
@@ -35,12 +37,17 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
     const undo = useMapperStore((s) => s.undo)
     const redo = useMapperStore((s) => s.redo)
     const setDirty = useMapperStore((s) => s.setDirty)
+    const setSaving = useMapperStore((s) => s.setSaving)
+    const setSaveError = useMapperStore((s) => s.setSaveError)
+    const setLastSavedAt = useMapperStore((s) => s.setLastSavedAt)
+    const setCurrentResource = useMapperStore((s) => s.setCurrentResource)
     const mapperState = useMapperStore((s) => s.mapperState)
     const currentResourceName = useMapperStore((s) => s.currentResourceName)
     const currentResourceId = useMapperStore((s) => s.currentResourceId)
     const canUndo = useCanUndo()
     const canRedo = useCanRedo()
     const isDirty = useIsDirty()
+    const isSaving = useIsSaving()
 
     const [executeOpen, setExecuteOpen] = useState(false)
     const [excelImportOpen, setExcelImportOpen] = useState(false)
@@ -52,18 +59,36 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
         resetState()
     }
 
-    function handleSave() {
+    async function handleSave() {
         if (!currentResourceId || !currentResourceName) {
             setSaveAsOpen(true)
             return
         }
+        setSaving(true)
+        setSaveError(null)
         try {
-            // Embed the name so downloads use it too
             const stateWithName = { ...mapperState, name: currentResourceName }
-            saveToLocal(stateWithName, currentResourceName, currentResourceId)
+            const nodeCount =
+                countNodes(mapperState.sourceTreeNode) + countNodes(mapperState.targetTreeNode)
+            const result = await saveMap({
+                data: {
+                    id: currentResourceId,
+                    name: currentResourceName,
+                    state: stateWithName as unknown as Record<string, unknown>,
+                    sourceInputType: mapperState.sourceInputType ?? undefined,
+                    targetInputType: mapperState.targetInputType ?? undefined,
+                    nodeCount,
+                },
+            })
+            setCurrentResource(result.name, result.id)
+            setLastSavedAt(result.savedAt)
             setDirty(false)
         } catch (err) {
-            window.alert(err instanceof Error ? err.message : "Failed to save.")
+            const message = err instanceof Error ? err.message : "Failed to save."
+            setSaveError(message)
+            window.alert(message)
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -100,10 +125,14 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
                 size="sm"
                 className="rounded-full gap-1.5"
                 onClick={handleSave}
-                disabled={!isDirty}
+                disabled={!isDirty || isSaving}
                 title="Save mapper"
             >
-                <Save className="h-4 w-4" />
+                {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                    <Save className="h-4 w-4" />
+                )}
                 <span className="hidden sm:inline">Save</span>
             </Button>
             <Button

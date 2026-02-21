@@ -1,31 +1,16 @@
-import { v4 as uuidv4 } from "uuid"
 import type { MapperState, MapperTreeNode } from "./types"
 import { deserializeMapperState } from "./serialization"
 import { migrateFromJtmap } from "./migration"
 import { isLegacyJtmap, isMapperState } from "./serialization"
 
 // ============================================================
-// Types
+// Helpers
 // ============================================================
 
-export interface SavedMapEntry {
-    id: string // UUID — localStorage key suffix
-    name: string // Human-readable name
-    savedAt: string // ISO timestamp
-    sourceInputType: string | null
-    targetInputType: string | null
-    nodeCount: number // Quick stats for the open dialog
-}
-
-// localStorage key schema:
-// "jtmapper:index"        → JSON array of SavedMapEntry[]
-// "jtmapper:map:{id}"     → JSON string of full MapperState
-
-// ============================================================
-// Internal helpers
-// ============================================================
-
-function countNodes(node: MapperTreeNode | null | undefined): number {
+/**
+ * Count total tree nodes (source + target helper).
+ */
+export function countNodes(node: MapperTreeNode | null | undefined): number {
     if (!node) return 0
     let count = 1
     if (node.children) {
@@ -36,89 +21,9 @@ function countNodes(node: MapperTreeNode | null | undefined): number {
     return count
 }
 
-function saveWithQuotaCheck(key: string, value: string): void {
-    try {
-        localStorage.setItem(key, value)
-    } catch (err) {
-        if (err instanceof DOMException && err.name === "QuotaExceededError") {
-            throw new Error("Storage quota exceeded. Please delete some saved maps to free space.")
-        }
-        throw err
-    }
-}
-
 // ============================================================
-// Public API
+// Client-side file I/O (download / upload)
 // ============================================================
-
-/**
- * Lists all saved maps from localStorage, newest first.
- */
-export function listSavedMaps(): SavedMapEntry[] {
-    try {
-        const raw = localStorage.getItem("jtmapper:index")
-        if (!raw) return []
-        const entries = JSON.parse(raw) as SavedMapEntry[]
-        return entries.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
-    } catch {
-        return []
-    }
-}
-
-/**
- * Saves the current state to localStorage under a given ID and name.
- * Creates or updates the entry in the index.
- * Returns the ID used.
- */
-export function saveToLocal(state: MapperState, name: string, id?: string): string {
-    const mapId = id ?? uuidv4()
-    const json = JSON.stringify(state, null, 2)
-
-    // Save the state:
-    saveWithQuotaCheck(`jtmapper:map:${mapId}`, json)
-
-    // Update index:
-    const index = listSavedMaps().filter((e) => e.id !== mapId)
-    const entry: SavedMapEntry = {
-        id: mapId,
-        name,
-        savedAt: new Date().toISOString(),
-        sourceInputType: state.sourceInputType ?? null,
-        targetInputType: state.targetInputType ?? null,
-        nodeCount: countNodes(state.sourceTreeNode) + countNodes(state.targetTreeNode),
-    }
-    index.unshift(entry) // Add to front (newest first)
-    saveWithQuotaCheck("jtmapper:index", JSON.stringify(index))
-
-    return mapId
-}
-
-/**
- * Loads a saved map from localStorage by ID.
- * Returns null if not found.
- */
-export function loadFromLocal(id: string): MapperState | null {
-    try {
-        const raw = localStorage.getItem(`jtmapper:map:${id}`)
-        if (!raw) return null
-        return deserializeMapperState(raw)
-    } catch {
-        return null
-    }
-}
-
-/**
- * Deletes a saved map from localStorage by ID.
- */
-export function deleteFromLocal(id: string): void {
-    try {
-        localStorage.removeItem(`jtmapper:map:${id}`)
-        const index = listSavedMaps().filter((e) => e.id !== id)
-        localStorage.setItem("jtmapper:index", JSON.stringify(index))
-    } catch {
-        // Ignore errors on delete
-    }
-}
 
 /**
  * Triggers a browser download of the state as a .jtmap JSON file.

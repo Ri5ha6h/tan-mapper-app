@@ -1,17 +1,25 @@
 import * as React from "react"
-import { FileDown, Search, Trash2 } from "lucide-react"
+import { FileDown, Loader2, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useMapperStore } from "@/lib/mapper/store"
-import {
-    deleteFromLocal,
-    listSavedMaps,
-    loadFromJtmapFile,
-    loadFromLocal,
-    type SavedMapEntry,
-} from "@/lib/mapper/persistence"
+import { loadFromJtmapFile } from "@/lib/mapper/persistence"
+import { listMaps, loadMap, deleteMap } from "@/lib/mapper/persistence.server"
+import { deserializeMapperState } from "@/lib/mapper/serialization"
 import { cn } from "@/lib/utils"
+
+// ─── Types ──────────────────────────────────────────────────────────────────────
+
+interface SavedMapEntry {
+    id: string
+    name: string
+    sourceInputType: string | null
+    targetInputType: string | null
+    nodeCount: number | null
+    createdAt: Date | null
+    updatedAt: Date | null
+}
 
 // ─── Props ──────────────────────────────────────────────────────────────────────
 
@@ -22,9 +30,9 @@ interface OpenMapDialogProps {
 
 // ─── Relative time helper ────────────────────────────────────────────────────────
 
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(date: Date | string): string {
     const now = Date.now()
-    const then = new Date(isoString).getTime()
+    const then = typeof date === "string" ? new Date(date).getTime() : date.getTime()
     const diffMs = now - then
     const diffMins = Math.floor(diffMs / 60_000)
 
@@ -42,10 +50,12 @@ function MapListRow({
     entry,
     onOpen,
     onDelete,
+    isLoading,
 }: {
     entry: SavedMapEntry
     onOpen: (entry: SavedMapEntry) => void
     onDelete: (id: string, name: string) => void
+    isLoading: boolean
 }) {
     return (
         <div
@@ -69,12 +79,14 @@ function MapListRow({
                             {entry.targetInputType}
                         </span>
                     )}
-                    <span className="px-1.5 py-0.5 rounded-full text-xs bg-muted/40 text-muted-foreground shrink-0">
-                        {entry.nodeCount} nodes
-                    </span>
+                    {entry.nodeCount != null && (
+                        <span className="px-1.5 py-0.5 rounded-full text-xs bg-muted/40 text-muted-foreground shrink-0">
+                            {entry.nodeCount} nodes
+                        </span>
+                    )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
-                    {formatRelativeTime(entry.savedAt)}
+                    {entry.updatedAt ? formatRelativeTime(entry.updatedAt) : "unknown"}
                 </div>
             </div>
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -83,8 +95,9 @@ function MapListRow({
                     size="sm"
                     className="rounded-full h-7 text-xs gap-1"
                     onClick={() => onOpen(entry)}
+                    disabled={isLoading}
                 >
-                    Open
+                    {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Open"}
                 </Button>
                 <Button
                     variant="ghost"
@@ -181,6 +194,8 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
     const [savedMaps, setSavedMaps] = React.useState<SavedMapEntry[]>([])
     const [search, setSearch] = React.useState("")
     const [openError, setOpenError] = React.useState<string | null>(null)
+    const [isLoadingList, setIsLoadingList] = React.useState(false)
+    const [loadingMapId, setLoadingMapId] = React.useState<string | null>(null)
 
     // File tab state
     const [droppedFile, setDroppedFile] = React.useState<File | null>(null)
@@ -194,31 +209,60 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
     // Refresh saved maps list whenever dialog opens
     React.useEffect(() => {
         if (open) {
-            setSavedMaps(listSavedMaps())
             setSearch("")
             setOpenError(null)
+            setLoadingMapId(null)
             setDroppedFile(null)
             setFileName(null)
             setFileError(null)
             setFileParsedOk(false)
             setParsedFileState(null)
+            fetchMaps()
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
-    function handleOpenSaved(entry: SavedMapEntry) {
-        const state = loadFromLocal(entry.id)
-        if (!state) {
-            setOpenError(`Could not load "${entry.name}" — data may be missing or corrupt.`)
-            return
+    async function fetchMaps() {
+        setIsLoadingList(true)
+        try {
+            const maps = await listMaps()
+            setSavedMaps(maps)
+        } catch (err) {
+            setOpenError(err instanceof Error ? err.message : "Failed to fetch maps")
+            setSavedMaps([])
+        } finally {
+            setIsLoadingList(false)
         }
-        loadState(state, entry.name, entry.id)
-        onClose()
     }
 
-    function handleDelete(id: string, name: string) {
-        if (window.confirm(`Delete "${name}"?`)) {
-            deleteFromLocal(id)
-            setSavedMaps(listSavedMaps())
+    async function handleOpenSaved(entry: SavedMapEntry) {
+        setLoadingMapId(entry.id)
+        setOpenError(null)
+        try {
+            const stateData = await loadMap({ data: { id: entry.id } })
+            // Server returns the raw state object — deserialize via JSON round-trip
+            const json = JSON.stringify(stateData)
+            const state = deserializeMapperState(json)
+            loadState(state, entry.name, entry.id)
+            onClose()
+        } catch (err) {
+            setOpenError(
+                err instanceof Error
+                    ? err.message
+                    : `Could not load "${entry.name}" — data may be missing or corrupt.`,
+            )
+        } finally {
+            setLoadingMapId(null)
+        }
+    }
+
+    async function handleDelete(id: string, name: string) {
+        if (!window.confirm(`Delete "${name}"?`)) return
+        try {
+            await deleteMap({ data: { id } })
+            await fetchMaps()
+        } catch (err) {
+            setOpenError(err instanceof Error ? err.message : "Failed to delete map")
         }
     }
 
@@ -297,7 +341,12 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
                         )}
 
                         <div className="max-h-64 overflow-y-auto rounded-xl">
-                            {filteredMaps.length === 0 ? (
+                            {isLoadingList ? (
+                                <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                    <span className="text-sm">Loading maps…</span>
+                                </div>
+                            ) : filteredMaps.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
                                     <FileDown className="h-8 w-8 opacity-30" />
                                     <span className="text-sm">
@@ -314,6 +363,7 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
                                             entry={entry}
                                             onOpen={handleOpenSaved}
                                             onDelete={handleDelete}
+                                            isLoading={loadingMapId === entry.id}
                                         />
                                     ))}
                                 </div>

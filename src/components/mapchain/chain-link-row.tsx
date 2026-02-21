@@ -1,12 +1,12 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { CSS } from "@dnd-kit/utilities"
 import { useSortable } from "@dnd-kit/sortable"
-import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Loader2, Trash2 } from "lucide-react"
 
 import { ChainScriptEditor } from "./chain-script-editor"
 import type { MapChainLink } from "@/lib/mapchain/types"
 import { useMapChainStore } from "@/lib/mapchain/store"
-import { listSavedMaps } from "@/lib/mapper/persistence"
+import { listMaps } from "@/lib/mapper/persistence.server"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,9 +21,44 @@ import { cn } from "@/lib/utils"
 
 // ─── MapLinkContent ────────────────────────────────────────────────────────────
 
+interface SavedMapOption {
+    id: string
+    name: string
+    sourceInputType: string | null
+    targetInputType: string | null
+}
+
 function MapLinkContent({ link }: { link: MapChainLink }) {
-    const savedMaps = listSavedMaps()
+    const [savedMaps, setSavedMaps] = useState<SavedMapOption[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const setLinkMap = useMapChainStore((s) => s.setLinkMap)
+
+    useEffect(() => {
+        let cancelled = false
+        setIsLoading(true)
+        listMaps()
+            .then((maps) => {
+                if (!cancelled) setSavedMaps(maps)
+            })
+            .catch(() => {
+                if (!cancelled) setSavedMaps([])
+            })
+            .finally(() => {
+                if (!cancelled) setIsLoading(false)
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    if (isLoading) {
+        return (
+            <div className="mt-3 pt-3 border-t border-glass-border/50 flex items-center gap-2 text-muted-foreground text-sm py-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading maps…
+            </div>
+        )
+    }
 
     return (
         <div className="mt-3 pt-3 border-t border-glass-border/50">

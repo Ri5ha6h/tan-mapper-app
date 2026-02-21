@@ -4,6 +4,7 @@ import {
     FilePlus2,
     FolderOpen,
     Link2,
+    Loader2,
     Play,
     Save,
     SaveAll,
@@ -12,16 +13,9 @@ import {
 } from "lucide-react"
 
 import { ChainExecuteDialog } from "./chain-execute-dialog"
-import type { SavedChainEntry } from "@/lib/mapchain/persistence"
 import { useMapChainStore } from "@/lib/mapchain/store"
-import {
-    deleteChainFromLocal,
-    downloadAsJtchain,
-    listSavedChains,
-    loadChainFromLocal,
-    loadFromJtchainFile,
-    saveChainToLocal,
-} from "@/lib/mapchain/persistence"
+import { downloadAsJtchain, loadFromJtchainFile } from "@/lib/mapchain/persistence"
+import { listChains, saveChain, loadChain, deleteChain } from "@/lib/mapchain/persistence.server"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,12 +29,24 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { isChainExecutable } from "@/lib/mapchain/chain-engine"
+import type { MapChain } from "@/lib/mapchain/types"
+
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+interface SavedChainEntry {
+    id: string
+    name: string
+    linkCount: number | null
+    createdAt: Date | null
+    updatedAt: Date | null
+}
 
 // ─── Relative time helper ──────────────────────────────────────────────────────
 
-function formatRelativeTime(isoString: string): string {
+function formatRelativeTime(date: Date | string | null): string {
+    if (!date) return "unknown"
     const now = Date.now()
-    const then = new Date(isoString).getTime()
+    const then = typeof date === "string" ? new Date(date).getTime() : date.getTime()
     const diffMs = now - then
     const diffMins = Math.floor(diffMs / 60_000)
     if (diffMins < 1) return "just now"
@@ -62,10 +68,12 @@ function ChainListRow({
     entry,
     onOpen,
     onDelete,
+    isLoading,
 }: {
     entry: SavedChainEntry
     onOpen: (entry: SavedChainEntry) => void
     onDelete: (id: string, name: string) => void
+    isLoading: boolean
 }) {
     return (
         <div
@@ -80,11 +88,11 @@ function ChainListRow({
                         {entry.name}
                     </span>
                     <Badge variant="outline" className="rounded-full text-xs shrink-0">
-                        {entry.linkCount} step{entry.linkCount !== 1 ? "s" : ""}
+                        {entry.linkCount ?? 0} step{(entry.linkCount ?? 0) !== 1 ? "s" : ""}
                     </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatRelativeTime(entry.savedAt)}
+                    {formatRelativeTime(entry.updatedAt)}
                 </p>
             </div>
 
@@ -94,8 +102,9 @@ function ChainListRow({
                     size="sm"
                     className="rounded-full h-7 text-xs"
                     onClick={() => onOpen(entry)}
+                    disabled={isLoading}
                 >
-                    Open
+                    {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : "Open"}
                 </Button>
                 <Button
                     variant="ghost"
@@ -112,45 +121,75 @@ function ChainListRow({
 }
 
 function ChainOpenDialog({ open, onClose }: ChainOpenDialogProps) {
-    const loadChain = useMapChainStore((s) => s.loadChain)
+    const loadChainToStore = useMapChainStore((s) => s.loadChain)
 
     const [search, setSearch] = useState("")
     const [savedChains, setSavedChains] = useState<Array<SavedChainEntry>>([])
     const [fileError, setFileError] = useState<string | null>(null)
     const [isDragOver, setIsDragOver] = useState(false)
+    const [isLoadingList, setIsLoadingList] = useState(false)
+    const [loadingChainId, setLoadingChainId] = useState<string | null>(null)
+    const [openError, setOpenError] = useState<string | null>(null)
+
+    async function fetchChains() {
+        setIsLoadingList(true)
+        try {
+            const chains = await listChains()
+            setSavedChains(chains)
+        } catch (err) {
+            setOpenError(err instanceof Error ? err.message : "Failed to fetch chains")
+            setSavedChains([])
+        } finally {
+            setIsLoadingList(false)
+        }
+    }
 
     // Reload list every time dialog opens
     function handleOpenChange(isOpen: boolean) {
         if (isOpen) {
-            setSavedChains(listSavedChains())
             setSearch("")
             setFileError(null)
+            setOpenError(null)
+            setLoadingChainId(null)
+            void fetchChains()
         } else {
             onClose()
         }
     }
 
-    function handleOpen(entry: SavedChainEntry) {
-        const chain = loadChainFromLocal(entry.id)
-        if (!chain) return
-        loadChain(chain, entry.name, entry.id)
-        onClose()
+    async function handleOpen(entry: SavedChainEntry) {
+        setLoadingChainId(entry.id)
+        setOpenError(null)
+        try {
+            const chainData = await loadChain({ data: { id: entry.id } })
+            const chain = chainData as unknown as MapChain
+            loadChainToStore(chain, entry.name, entry.id)
+            onClose()
+        } catch (err) {
+            setOpenError(err instanceof Error ? err.message : "Failed to load chain")
+        } finally {
+            setLoadingChainId(null)
+        }
     }
 
-    function handleDelete(id: string, name: string) {
+    async function handleDelete(id: string, name: string) {
         if (!window.confirm(`Delete chain "${name}"?`)) return
-        deleteChainFromLocal(id)
-        setSavedChains(listSavedChains())
+        try {
+            await deleteChain({ data: { id } })
+            await fetchChains()
+        } catch (err) {
+            setOpenError(err instanceof Error ? err.message : "Failed to delete chain")
+        }
     }
 
     async function handleFileDrop(file: File) {
         setFileError(null)
-        const { chain, error } = await loadFromJtchainFile(file)
-        if (error || !chain) {
+        const { chain: parsedChain, error } = await loadFromJtchainFile(file)
+        if (error || !parsedChain) {
             setFileError(error ?? "Failed to parse file")
             return
         }
-        loadChain(chain, chain.name, null)
+        loadChainToStore(parsedChain, parsedChain.name, null)
         onClose()
     }
 
@@ -187,8 +226,19 @@ function ChainOpenDialog({ open, onClose }: ChainOpenDialogProps) {
                         />
                     </div>
 
+                    {openError && (
+                        <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                            {openError}
+                        </div>
+                    )}
+
                     <div className="max-h-56 overflow-y-auto flex flex-col gap-0.5">
-                        {filtered.length === 0 ? (
+                        {isLoadingList ? (
+                            <div className="flex items-center justify-center py-6 text-muted-foreground gap-2">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                                <span className="text-sm">Loading chains…</span>
+                            </div>
+                        ) : filtered.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-6">
                                 {savedChains.length === 0
                                     ? "No saved chains yet."
@@ -201,6 +251,7 @@ function ChainOpenDialog({ open, onClose }: ChainOpenDialogProps) {
                                     entry={entry}
                                     onOpen={handleOpen}
                                     onDelete={handleDelete}
+                                    isLoading={loadingChainId === entry.id}
                                 />
                             ))
                         )}
@@ -261,35 +312,45 @@ interface ChainSaveAsDialogProps {
 function ChainSaveAsDialog({ open, onClose }: ChainSaveAsDialogProps) {
     const chain = useMapChainStore((s) => s.chain)
     const currentChainName = useMapChainStore((s) => s.currentChainName)
-    const currentChainId = useMapChainStore((s) => s.currentChainId)
     const setCurrentChain = useMapChainStore((s) => s.setCurrentChain)
     const setDirty = useMapChainStore((s) => s.setDirty)
 
     const [name, setName] = useState(currentChainName ?? chain.name)
     const [error, setError] = useState<string | null>(null)
+    const [saving, setSaving] = useState(false)
 
     function handleOpenChange(isOpen: boolean) {
         if (isOpen) {
             setName(currentChainName ?? chain.name)
             setError(null)
+            setSaving(false)
         } else {
             onClose()
         }
     }
 
-    function handleSave() {
+    async function handleSave() {
         const trimmed = name.trim()
         if (!trimmed) {
             setError("Name is required.")
             return
         }
+        setSaving(true)
+        setError(null)
         try {
-            const id = saveChainToLocal(chain, trimmed, currentChainId ?? undefined)
-            setCurrentChain(trimmed, id)
+            const result = await saveChain({
+                data: {
+                    name: trimmed,
+                    chain: chain as unknown as Record<string, unknown>,
+                    linkCount: chain.links.length,
+                },
+            })
+            setCurrentChain(result.name, result.id)
             setDirty(false)
             onClose()
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save.")
+            setSaving(false)
         }
     }
 
@@ -313,11 +374,20 @@ function ChainSaveAsDialog({ open, onClose }: ChainSaveAsDialogProps) {
                 </div>
 
                 <DialogFooter>
-                    <Button variant="ghost" className="rounded-full" onClick={onClose}>
+                    <Button
+                        variant="ghost"
+                        className="rounded-full"
+                        onClick={onClose}
+                        disabled={saving}
+                    >
                         Cancel
                     </Button>
-                    <Button className="rounded-full" onClick={handleSave}>
-                        Save
+                    <Button
+                        className="rounded-full"
+                        onClick={handleSave}
+                        disabled={!name.trim() || saving}
+                    >
+                        {saving ? "Saving…" : "Save"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -330,11 +400,15 @@ function ChainSaveAsDialog({ open, onClose }: ChainSaveAsDialogProps) {
 export function ChainToolbar() {
     const chain = useMapChainStore((s) => s.chain)
     const isDirty = useMapChainStore((s) => s.isDirty)
+    const isSaving = useMapChainStore((s) => s.isSaving)
     const currentChainName = useMapChainStore((s) => s.currentChainName)
     const currentChainId = useMapChainStore((s) => s.currentChainId)
     const addLink = useMapChainStore((s) => s.addLink)
     const resetChain = useMapChainStore((s) => s.resetChain)
     const setDirty = useMapChainStore((s) => s.setDirty)
+    const setSaving = useMapChainStore((s) => s.setSaving)
+    const setSaveError = useMapChainStore((s) => s.setSaveError)
+    const setCurrentChain = useMapChainStore((s) => s.setCurrentChain)
 
     const [openDialogOpen, setOpenDialogOpen] = useState(false)
     const [saveAsOpen, setSaveAsOpen] = useState(false)
@@ -347,16 +421,30 @@ export function ChainToolbar() {
         resetChain()
     }
 
-    function handleSave() {
+    async function handleSave() {
         if (!currentChainId || !currentChainName) {
             setSaveAsOpen(true)
             return
         }
+        setSaving(true)
+        setSaveError(null)
         try {
-            saveChainToLocal(chain, currentChainName, currentChainId)
+            const result = await saveChain({
+                data: {
+                    id: currentChainId,
+                    name: currentChainName,
+                    chain: chain as unknown as Record<string, unknown>,
+                    linkCount: chain.links.length,
+                },
+            })
+            setCurrentChain(result.name, result.id)
             setDirty(false)
         } catch (err) {
-            window.alert(err instanceof Error ? err.message : "Failed to save.")
+            const message = err instanceof Error ? err.message : "Failed to save."
+            setSaveError(message)
+            window.alert(message)
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -388,10 +476,14 @@ export function ChainToolbar() {
                 size="sm"
                 className="rounded-full gap-1.5"
                 onClick={handleSave}
-                disabled={!isDirty}
+                disabled={!isDirty || isSaving}
                 title="Save chain"
             >
-                <Save className="h-4 w-4" />
+                {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                    <Save className="h-4 w-4" />
+                )}
                 <span className="hidden sm:inline">Save</span>
             </Button>
             <Button

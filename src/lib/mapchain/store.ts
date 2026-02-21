@@ -24,6 +24,8 @@ interface MapChainStore {
     // State
     chain: MapChain
     isDirty: boolean
+    isSaving: boolean
+    saveError: string | null
     currentChainId: string | null
     currentChainName: string | null
 
@@ -46,6 +48,8 @@ interface MapChainStore {
     loadChain: (chain: MapChain, name: string, id: string | null) => void
     resetChain: () => void
     setDirty: (dirty: boolean) => void
+    setSaving: (saving: boolean) => void
+    setSaveError: (error: string | null) => void
     setCurrentChain: (name: string, id: string) => void
 }
 
@@ -57,6 +61,8 @@ export const useMapChainStore = create<MapChainStore>()(
     immer((set) => ({
         chain: createDefaultChain(),
         isDirty: false,
+        isSaving: false,
+        saveError: null,
         currentChainId: null,
         currentChainName: null,
 
@@ -162,6 +168,8 @@ export const useMapChainStore = create<MapChainStore>()(
                 state.currentChainName = name
                 state.currentChainId = id
                 state.isDirty = false
+                state.isSaving = false
+                state.saveError = null
             })
         },
 
@@ -171,12 +179,26 @@ export const useMapChainStore = create<MapChainStore>()(
                 state.currentChainId = null
                 state.currentChainName = null
                 state.isDirty = false
+                state.isSaving = false
+                state.saveError = null
             })
         },
 
         setDirty(dirty) {
             set((state) => {
                 state.isDirty = dirty
+            })
+        },
+
+        setSaving(saving) {
+            set((state) => {
+                state.isSaving = saving
+            })
+        },
+
+        setSaveError(error) {
+            set((state) => {
+                state.saveError = error
             })
         },
 

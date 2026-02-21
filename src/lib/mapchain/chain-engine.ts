@@ -1,5 +1,6 @@
 import type { ChainStepResult, MapChainLink } from "./types"
-import { loadFromLocal } from "@/lib/mapper/persistence"
+import { loadMapForChainExecution } from "@/lib/mapper/persistence.server"
+import { deserializeMapperState } from "@/lib/mapper/serialization"
 import { executeScript, generateScript } from "@/lib/mapper/engine"
 
 // ============================================================
@@ -66,11 +67,14 @@ export async function executeChain(
             let output: string
 
             if (link.type === "JT_MAP") {
-                // Load the map from localStorage
+                // Load the map from server
                 if (!link.mapId) throw new Error("No map selected for this step")
-                const mapState = loadFromLocal(link.mapId)
-                if (!mapState)
-                    throw new Error(`Map "${link.mapName ?? link.mapId}" not found in saved maps`)
+                const stateData = await loadMapForChainExecution({
+                    data: { mapId: link.mapId },
+                })
+                // Server returns raw JSONB — deserialize via JSON round-trip
+                const json = JSON.stringify(stateData)
+                const mapState = deserializeMapperState(json)
 
                 // Generate and execute the transformation script
                 const srcType = mapState.sourceInputType.toLowerCase() as "json" | "xml"

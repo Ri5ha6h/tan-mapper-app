@@ -9,7 +9,8 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog"
 import { useMapperStore } from "@/lib/mapper/store"
-import { saveToLocal } from "@/lib/mapper/persistence"
+import { countNodes } from "@/lib/mapper/persistence"
+import { saveMap } from "@/lib/mapper/persistence.server"
 
 interface SaveAsDialogProps {
     open: boolean
@@ -21,6 +22,7 @@ export function SaveAsDialog({ open, onClose }: SaveAsDialogProps) {
     const currentName = useMapperStore((s) => s.currentResourceName)
     const setCurrentResource = useMapperStore((s) => s.setCurrentResource)
     const setDirty = useMapperStore((s) => s.setDirty)
+    const setLastSavedAt = useMapperStore((s) => s.setLastSavedAt)
 
     const [name, setName] = React.useState("")
     const [error, setError] = React.useState<string | null>(null)
@@ -35,18 +37,29 @@ export function SaveAsDialog({ open, onClose }: SaveAsDialogProps) {
         }
     }, [open, currentName])
 
-    function handleSave() {
+    async function handleSave() {
         const trimmed = name.trim()
         if (!trimmed) {
             setError("Please enter a name.")
             return
         }
         setSaving(true)
+        setError(null)
         try {
-            // Embed the name into the state so downloads use it too
             const stateWithName = { ...mapperState, name: trimmed }
-            const id = saveToLocal(stateWithName, trimmed)
-            setCurrentResource(trimmed, id)
+            const nodeCount =
+                countNodes(mapperState.sourceTreeNode) + countNodes(mapperState.targetTreeNode)
+            const result = await saveMap({
+                data: {
+                    name: trimmed,
+                    state: stateWithName as unknown as Record<string, unknown>,
+                    sourceInputType: mapperState.sourceInputType ?? undefined,
+                    targetInputType: mapperState.targetInputType ?? undefined,
+                    nodeCount,
+                },
+            })
+            setCurrentResource(result.name, result.id)
+            setLastSavedAt(result.savedAt)
             setDirty(false)
             onClose()
         } catch (err) {
@@ -91,7 +104,7 @@ export function SaveAsDialog({ open, onClose }: SaveAsDialogProps) {
                         onClick={handleSave}
                         disabled={!name.trim() || saving}
                     >
-                        Save
+                        {saving ? "Saving…" : "Save"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
