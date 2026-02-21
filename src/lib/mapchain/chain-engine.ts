@@ -2,6 +2,8 @@ import type { ChainStepResult, MapChainLink } from "./types"
 import { loadMapForChainExecution } from "@/lib/mapper/persistence.server"
 import { deserializeMapperState } from "@/lib/mapper/serialization"
 import { executeScript, generateScript } from "@/lib/mapper/engine"
+import { generateGroovyScript } from "@/lib/mapper/groovy-engine"
+import { executeGroovyScript } from "@/lib/mapper/groovy-executor.server"
 
 // ============================================================
 // Public types
@@ -79,11 +81,23 @@ export async function executeChain(
                 // Generate and execute the transformation script
                 const srcType = mapState.sourceInputType.toLowerCase() as "json" | "xml"
                 const tgtType = mapState.targetInputType.toLowerCase() as "json" | "xml"
-                const script = generateScript(mapState, srcType, tgtType)
-                const result = await executeScript(script, currentInput, mapState.localContext)
+                const isGroovy = mapState.scriptLanguage === "groovy"
 
-                if (result.error) throw new Error(result.error)
-                output = result.output
+                if (isGroovy) {
+                    // Groovy: generate Groovy script and execute on sidecar
+                    const script = generateGroovyScript(mapState, srcType, tgtType)
+                    const groovyResult = await executeGroovyScript({
+                        data: { script, input: currentInput, timeout: 30 },
+                    })
+                    if (groovyResult.error) throw new Error(groovyResult.error)
+                    output = groovyResult.output ?? ""
+                } else {
+                    // JavaScript: generate JS script and execute in-process
+                    const script = generateScript(mapState, srcType, tgtType)
+                    const result = await executeScript(script, currentInput, mapState.localContext)
+                    if (result.error) throw new Error(result.error)
+                    output = result.output
+                }
             } else {
                 // JT_SCRIPT: execute inline JS script
                 // Script must accept 'input' (string) and return a string

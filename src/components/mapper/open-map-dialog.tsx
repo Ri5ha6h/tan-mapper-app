@@ -1,12 +1,14 @@
 import * as React from "react"
-import { FileDown, Loader2, Search, Trash2 } from "lucide-react"
+import { ArrowLeftRight, Coffee, FileCode, FileDown, Loader2, Search, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useMapperStore } from "@/lib/mapper/store"
 import { loadFromJtmapFile } from "@/lib/mapper/persistence"
 import { listMaps, loadMap, deleteMap } from "@/lib/mapper/persistence.server"
-import { deserializeMapperState } from "@/lib/mapper/serialization"
+import { deserializeMapperState, isLegacyJtmap } from "@/lib/mapper/serialization"
+import { transpileMapperState } from "@/lib/mapper/groovy-transpiler"
+import type { MapperState } from "@/lib/mapper/types"
 import { cn } from "@/lib/utils"
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -202,9 +204,18 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
     const [fileName, setFileName] = React.useState<string | null>(null)
     const [fileError, setFileError] = React.useState<string | null>(null)
     const [fileParsedOk, setFileParsedOk] = React.useState(false)
-    const [parsedFileState, setParsedFileState] = React.useState<
-        Awaited<ReturnType<typeof loadFromJtmapFile>>["state"] | null
-    >(null)
+    const [parsedFileState, setParsedFileState] = React.useState<MapperState | null>(null)
+
+    // Legacy Groovy import flow
+    const [isLegacyFile, setIsLegacyFile] = React.useState(false)
+    const [legacyChoice, setLegacyChoice] = React.useState<"pending" | "translate" | "keep" | null>(
+        null,
+    )
+    const [translateResult, setTranslateResult] = React.useState<{
+        translatedFields: number
+        totalFields: number
+        warningCount: number
+    } | null>(null)
 
     // Refresh saved maps list whenever dialog opens
     React.useEffect(() => {
@@ -217,6 +228,9 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
             setFileError(null)
             setFileParsedOk(false)
             setParsedFileState(null)
+            setIsLegacyFile(false)
+            setLegacyChoice(null)
+            setTranslateResult(null)
             fetchMaps()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -272,15 +286,58 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
         setFileParsedOk(false)
         setParsedFileState(null)
         setDroppedFile(file)
+        setIsLegacyFile(false)
+        setLegacyChoice(null)
+        setTranslateResult(null)
 
-        const result = await loadFromJtmapFile(file)
-        if (result.error || !result.state) {
-            setFileError(result.error ?? "Failed to parse file")
+        try {
+            // Read raw JSON to detect legacy format before parsing
+            const text = await file.text()
+            const raw = JSON.parse(text) as unknown
+            const legacy = isLegacyJtmap(raw)
+
+            const result = await loadFromJtmapFile(file)
+            if (result.error || !result.state) {
+                setFileError(result.error ?? "Failed to parse file")
+                setFileParsedOk(false)
+            } else {
+                setFileParsedOk(true)
+                setParsedFileState(result.state)
+                if (legacy) {
+                    setIsLegacyFile(true)
+                    setLegacyChoice("pending")
+                }
+            }
+        } catch {
+            setFileError("Failed to read file")
             setFileParsedOk(false)
-        } else {
-            setFileParsedOk(true)
-            setParsedFileState(result.state)
         }
+    }
+
+    function handleLegacyTranslate() {
+        if (!parsedFileState) return
+        try {
+            const result = transpileMapperState(parsedFileState)
+            const translated = { ...result.state, scriptLanguage: "javascript" as const }
+            setParsedFileState(translated)
+            setLegacyChoice("translate")
+            setTranslateResult({
+                translatedFields: result.translatedFields,
+                totalFields: result.totalFields,
+                warningCount: result.warnings.length,
+            })
+        } catch (err) {
+            setFileError(
+                err instanceof Error ? err.message : "Translation failed — try keeping as Groovy.",
+            )
+        }
+    }
+
+    function handleLegacyKeep() {
+        if (!parsedFileState) return
+        const kept = { ...parsedFileState, scriptLanguage: "groovy" as const }
+        setParsedFileState(kept)
+        setLegacyChoice("keep")
     }
 
     function handleOpenFile() {
@@ -375,7 +432,87 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
                     <TabsContent value="file" className="mt-4">
                         <FileDropZone onFile={handleFile} error={fileError} fileName={fileName} />
 
-                        {fileParsedOk && (
+                        {/* Legacy Groovy import — choice dialog */}
+                        {fileParsedOk && isLegacyFile && legacyChoice === "pending" && (
+                            <div className="mt-3 space-y-2">
+                                <div className="text-sm font-medium text-foreground">
+                                    Legacy Groovy Map Imported
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    This map was created with the Groovy-based platform. How would
+                                    you like to handle the Groovy code?
+                                </p>
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        "w-full text-left p-3 rounded-xl border border-glass-border",
+                                        "bg-glass-bg hover:bg-primary/10 hover:border-primary/30 transition-colors",
+                                    )}
+                                    onClick={handleLegacyTranslate}
+                                >
+                                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                                        <ArrowLeftRight className="h-4 w-4 text-primary shrink-0" />
+                                        Auto-translate to JavaScript
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1 ml-6">
+                                        Convert all Groovy code to JS. Some complex patterns may
+                                        need manual review.
+                                    </p>
+                                </button>
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        "w-full text-left p-3 rounded-xl border border-glass-border",
+                                        "bg-glass-bg hover:bg-secondary/10 hover:border-secondary/30 transition-colors",
+                                    )}
+                                    onClick={handleLegacyKeep}
+                                >
+                                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                                        <Coffee className="h-4 w-4 text-secondary shrink-0" />
+                                        Keep as Groovy
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1 ml-6">
+                                        Preserve original Groovy code. Requires Groovy execution
+                                        service.
+                                    </p>
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Translation result summary */}
+                        {fileParsedOk && legacyChoice === "translate" && translateResult && (
+                            <div className="mt-3 text-sm text-accent bg-accent/10 border border-accent/20 rounded-lg px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <FileCode className="h-4 w-4 shrink-0" />
+                                    Translated {translateResult.translatedFields} of{" "}
+                                    {translateResult.totalFields} code fields.
+                                    {translateResult.warningCount > 0 && (
+                                        <span className="text-primary font-medium">
+                                            {translateResult.warningCount} warning(s).
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    Language set to JavaScript. Click Open to load.
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Keep as Groovy confirmation */}
+                        {fileParsedOk && legacyChoice === "keep" && (
+                            <div className="mt-3 text-sm text-secondary bg-secondary/10 border border-secondary/20 rounded-lg px-3 py-2">
+                                <div className="flex items-center gap-1.5">
+                                    <Coffee className="h-4 w-4 shrink-0" />
+                                    Groovy code preserved. Language set to Groovy.
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                    Click Open to load. Execution requires Groovy sidecar service.
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Non-legacy file success */}
+                        {fileParsedOk && !isLegacyFile && (
                             <div className="mt-3 text-sm text-accent bg-accent/10 border border-accent/20 rounded-lg px-3 py-2">
                                 File parsed successfully. Click Open to load it.
                             </div>
@@ -388,7 +525,9 @@ export function OpenMapDialog({ open, onClose }: OpenMapDialogProps) {
                             <Button
                                 className="rounded-full"
                                 onClick={handleOpenFile}
-                                disabled={!fileParsedOk}
+                                disabled={
+                                    !fileParsedOk || (isLegacyFile && legacyChoice === "pending")
+                                }
                             >
                                 Open
                             </Button>

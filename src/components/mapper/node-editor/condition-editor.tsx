@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { useMapperStore } from "@/lib/mapper/store"
+import { useMapperStore, useScriptLanguage } from "@/lib/mapper/store"
 import type { MapperTreeNode } from "@/lib/mapper/types"
 
 interface ConditionEditorProps {
@@ -13,6 +13,8 @@ interface ConditionEditorProps {
 export function ConditionEditor({ node }: ConditionEditorProps) {
     const setNodeCondition = useMapperStore((s) => s.setNodeCondition)
     const snapshot = useMapperStore((s) => s.snapshot)
+    const scriptLanguage = useScriptLanguage()
+    const isGroovy = scriptLanguage === "groovy"
 
     const [condition, setCondition] = useState(node.nodeCondition?.condition ?? "")
 
@@ -61,7 +63,11 @@ export function ConditionEditor({ node }: ConditionEditorProps) {
                         "text-sm font-mono min-h-[100px] resize-none bg-glass-bg/50 border-glass-border",
                         hasCondition ? "border-accent/40" : "",
                     ].join(" ")}
-                    placeholder="JavaScript boolean expression&#10;e.g. sourceData.status === 'ACTIVE'"
+                    placeholder={
+                        isGroovy
+                            ? "Groovy boolean expression\ne.g. sourceData.status == 'ACTIVE'"
+                            : "JavaScript boolean expression\ne.g. sourceData.status === 'ACTIVE'"
+                    }
                     value={condition}
                     onChange={(e) => setCondition(e.target.value)}
                     onBlur={(e) => handleConditionBlur(e.target.value)}
@@ -95,11 +101,23 @@ export function ConditionEditor({ node }: ConditionEditorProps) {
 
             {/* Help */}
             <div className="rounded-xl bg-muted/20 border border-glass-border p-3">
-                <p className="text-xs text-muted-foreground font-medium mb-1">Examples</p>
+                <p className="text-xs text-muted-foreground font-medium mb-1">
+                    Examples ({isGroovy ? "Groovy" : "JavaScript"})
+                </p>
                 <ul className="text-xs text-muted-foreground/70 space-y-0.5 font-mono">
-                    <li>_status === &apos;ACTIVE&apos;</li>
-                    <li>_amount &gt; 0</li>
-                    <li>_flag !== null &amp;&amp; _flag !== &apos;&apos;</li>
+                    {isGroovy ? (
+                        <>
+                            <li>_status == &apos;ACTIVE&apos;</li>
+                            <li>_amount &gt; 0</li>
+                            <li>_flag != null &amp;&amp; _flag != &apos;&apos;</li>
+                        </>
+                    ) : (
+                        <>
+                            <li>_status === &apos;ACTIVE&apos;</li>
+                            <li>_amount &gt; 0</li>
+                            <li>_flag !== null &amp;&amp; _flag !== &apos;&apos;</li>
+                        </>
+                    )}
                 </ul>
             </div>
         </div>

@@ -210,6 +210,8 @@ export interface FlatReference {
 
 export type ApplyMethod = "REPLACE" | "MERGE" | "ADD_ONLY" | "DELETE_ONLY" | "RESET"
 
+export type ScriptLanguage = "javascript" | "groovy"
+
 export const MAPPER_MODEL_VERSION = 1
 
 export interface MapperState {
@@ -232,4 +234,7 @@ export interface MapperState {
 
     // Raw text of the uploaded source file — used to pre-populate the Execute dialog input
     sourceOriginalContent?: string | null
+
+    // Script language for code generation and execution (default: "javascript")
+    scriptLanguage?: ScriptLanguage
 }

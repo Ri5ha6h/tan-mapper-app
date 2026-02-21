@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Code2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { useMapperStore } from "@/lib/mapper/store"
+import { useMapperStore, useScriptLanguage } from "@/lib/mapper/store"
 import { InsertValueMenu } from "./insert-value-menu"
 import { cn } from "@/lib/utils"
 import type { MapperTreeNode } from "@/lib/mapper/types"
@@ -44,6 +44,8 @@ function CheckboxField({ id, label, checked, onChange }: CheckboxFieldProps) {
 export function ValueEditor({ node }: ValueEditorProps) {
     const updateTargetNode = useMapperStore((s) => s.updateTargetNode)
     const snapshot = useMapperStore((s) => s.snapshot)
+    const scriptLanguage = useScriptLanguage()
+    const editorLanguage = scriptLanguage === "groovy" ? "groovy" : "javascript"
 
     // Local controlled state — synced from node
     const [value, setValue] = useState(node.value ?? "")
@@ -99,7 +101,8 @@ export function ValueEditor({ node }: ValueEditorProps) {
             <div className="flex flex-col h-full">
                 <div className="flex-1 min-h-0 rounded-xl overflow-hidden border border-glass-border">
                     <Editor
-                        defaultLanguage="javascript"
+                        defaultLanguage={editorLanguage}
+                        language={editorLanguage}
                         value={value}
                         theme="vs-dark"
                         options={{
@@ -273,7 +276,8 @@ export function ValueEditor({ node }: ValueEditorProps) {
                     >
                         <Editor
                             height="160px"
-                            defaultLanguage="javascript"
+                            defaultLanguage={editorLanguage}
+                            language={editorLanguage}
                             value={customCode}
                             theme="vs-dark"
                             options={{

@@ -1,6 +1,9 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
+    ArrowLeftRight,
+    Coffee,
     Download,
+    FileCode,
     FilePlus2,
     FolderOpen,
     Loader2,
@@ -20,11 +23,26 @@ import { UploadExcelDialog } from "./upload-excel-dialog"
 import { OpenMapDialog } from "./open-map-dialog"
 import { SaveAsDialog } from "./save-as-dialog"
 import { Button } from "@/components/ui/button"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Separator } from "@/components/ui/separator"
-import { useCanRedo, useCanUndo, useIsDirty, useIsSaving, useMapperStore } from "@/lib/mapper/store"
+import {
+    useCanRedo,
+    useCanUndo,
+    useIsDirty,
+    useIsSaving,
+    useMapperStore,
+    useScriptLanguage,
+} from "@/lib/mapper/store"
 import { downloadAsExcel } from "@/lib/mapper/excel-export"
 import { countNodes, downloadAsJtmap } from "@/lib/mapper/persistence"
 import { saveMap } from "@/lib/mapper/persistence.server"
+import { transpileMapperState } from "@/lib/mapper/groovy-transpiler"
+import { checkGroovySidecar } from "@/lib/mapper/groovy-executor.server"
 import { cn } from "@/lib/utils"
 
 interface MapperToolbarProps {
@@ -32,8 +50,52 @@ interface MapperToolbarProps {
     onPreferencesClick?: () => void
 }
 
+// ── Groovy sidecar status indicator ──────────────────────────────────────────
+
+function GroovySidecarStatus() {
+    const [status, setStatus] = useState<"checking" | "online" | "offline">("checking")
+
+    useEffect(() => {
+        let cancelled = false
+        checkGroovySidecar()
+            .then(({ available }) => {
+                if (!cancelled) setStatus(available ? "online" : "offline")
+            })
+            .catch(() => {
+                if (!cancelled) setStatus("offline")
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center gap-1 text-xs",
+                status === "online" && "text-accent",
+                status === "offline" && "text-destructive",
+            )}
+        >
+            <span
+                className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    status === "online" && "bg-accent",
+                    status === "offline" && "bg-destructive",
+                    status === "checking" && "bg-muted-foreground animate-pulse",
+                )}
+            />
+            {status === "online" ? "Groovy ready" : status === "offline" ? "Groovy offline" : "..."}
+        </span>
+    )
+}
+
+// ── Main toolbar ─────────────────────────────────────────────────────────────
+
 export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperToolbarProps) {
     const resetState = useMapperStore((s) => s.resetState)
+    const loadState = useMapperStore((s) => s.loadState)
+    const snapshot = useMapperStore((s) => s.snapshot)
     const undo = useMapperStore((s) => s.undo)
     const redo = useMapperStore((s) => s.redo)
     const setDirty = useMapperStore((s) => s.setDirty)
@@ -41,6 +103,7 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
     const setSaveError = useMapperStore((s) => s.setSaveError)
     const setLastSavedAt = useMapperStore((s) => s.setLastSavedAt)
     const setCurrentResource = useMapperStore((s) => s.setCurrentResource)
+    const setScriptLanguage = useMapperStore((s) => s.setScriptLanguage)
     const mapperState = useMapperStore((s) => s.mapperState)
     const currentResourceName = useMapperStore((s) => s.currentResourceName)
     const currentResourceId = useMapperStore((s) => s.currentResourceId)
@@ -48,11 +111,52 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
     const canRedo = useCanRedo()
     const isDirty = useIsDirty()
     const isSaving = useIsSaving()
+    const scriptLanguage = useScriptLanguage()
 
     const [executeOpen, setExecuteOpen] = useState(false)
     const [excelImportOpen, setExcelImportOpen] = useState(false)
     const [openMapOpen, setOpenMapOpen] = useState(false)
     const [saveAsOpen, setSaveAsOpen] = useState(false)
+    const [isTranslating, setIsTranslating] = useState(false)
+
+    const handleTranslateToJs = useCallback(async () => {
+        const confirmed = window.confirm(
+            "Translate all Groovy code to JavaScript? This will replace all code fields. A snapshot will be saved for undo.",
+        )
+        if (!confirmed) return
+
+        setIsTranslating(true)
+        try {
+            snapshot()
+            const result = transpileMapperState(mapperState)
+            loadState(result.state, currentResourceName, currentResourceId)
+            setScriptLanguage("javascript")
+            setDirty(true)
+
+            const summary = `Translated ${result.translatedFields} of ${result.totalFields} code fields.`
+            const warningCount = result.warnings.length
+            if (warningCount > 0) {
+                window.alert(
+                    `${summary}\n${warningCount} warning(s) — some patterns may need manual review.`,
+                )
+            } else {
+                window.alert(`${summary} No warnings.`)
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Translation failed."
+            window.alert(message)
+        } finally {
+            setIsTranslating(false)
+        }
+    }, [
+        mapperState,
+        snapshot,
+        loadState,
+        setScriptLanguage,
+        setDirty,
+        currentResourceName,
+        currentResourceId,
+    ])
 
     function handleNew() {
         if (isDirty && !window.confirm("Discard unsaved changes?")) return
@@ -246,6 +350,59 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
                 <Settings2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Preferences</span>
             </Button>
+
+            <Separator orientation="vertical" className="h-5 mx-1" />
+
+            {/* Script language toggle */}
+            <DropdownMenu>
+                <DropdownMenuTrigger
+                    className={cn(
+                        "inline-flex items-center justify-center gap-1.5 rounded-full px-3 h-8 text-sm font-medium",
+                        "hover:bg-accent/20 hover:text-accent-foreground transition-colors cursor-pointer",
+                    )}
+                >
+                    {scriptLanguage === "groovy" ? (
+                        <Coffee className="h-4 w-4" />
+                    ) : (
+                        <FileCode className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">
+                        {scriptLanguage === "groovy" ? "Groovy" : "JavaScript"}
+                    </span>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => setScriptLanguage("javascript")}>
+                        <FileCode className="h-4 w-4 mr-2" />
+                        JavaScript
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setScriptLanguage("groovy")}>
+                        <Coffee className="h-4 w-4 mr-2" />
+                        Groovy
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Translate to JS button (Groovy maps only) */}
+            {scriptLanguage === "groovy" && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full gap-1.5 text-primary hover:text-primary hover:bg-primary/20"
+                    onClick={handleTranslateToJs}
+                    disabled={isTranslating}
+                    title="Translate all Groovy code to JavaScript"
+                >
+                    {isTranslating ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <ArrowLeftRight className="h-4 w-4" />
+                    )}
+                    <span className="hidden sm:inline">Translate to JS</span>
+                </Button>
+            )}
+
+            {/* Groovy sidecar status (Groovy maps only) */}
+            {scriptLanguage === "groovy" && <GroovySidecarStatus />}
 
             {/* Resource name + dirty indicator */}
             <div className="flex items-center gap-1.5 ml-auto">

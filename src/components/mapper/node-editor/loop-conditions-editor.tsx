@@ -4,7 +4,7 @@ import { v4 as uuidv4 } from "uuid"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useMapperStore } from "@/lib/mapper/store"
+import { useMapperStore, useScriptLanguage } from "@/lib/mapper/store"
 import { getFullPath } from "@/lib/mapper/node-utils"
 import { cn } from "@/lib/utils"
 import { SourceTreePicker } from "./source-tree-picker"
@@ -17,6 +17,8 @@ interface LoopConditionsEditorProps {
 // ─── LoopConditionsEditor ─────────────────────────────────────────────────────
 
 export function LoopConditionsEditor({ node }: LoopConditionsEditorProps) {
+    const scriptLanguage = useScriptLanguage()
+    const isGroovy = scriptLanguage === "groovy"
     const sourceTree = useMapperStore((s) => s.mapperState.sourceTreeNode)
     const addLoopCondition = useMapperStore((s) => s.addLoopCondition)
     const removeLoopCondition = useMapperStore((s) => s.removeLoopCondition)
@@ -98,8 +100,8 @@ export function LoopConditionsEditor({ node }: LoopConditionsEditorProps) {
                 {conditions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 gap-2 text-muted-foreground/50">
                         <p className="text-xs text-center px-4">
-                            No loop conditions. Add one to filter loop items (e.g. status ==
-                            &apos;ACTIVE&apos;).
+                            No loop conditions. Add one to filter loop items (e.g. status{" "}
+                            {isGroovy ? "==" : "==="} &apos;ACTIVE&apos;).
                         </p>
                     </div>
                 ) : (

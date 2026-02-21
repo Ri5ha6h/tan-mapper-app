@@ -17,6 +17,7 @@ import type {
     MapperState,
     MapperTreeNode,
     NodeCondition,
+    ScriptLanguage,
     SourceReference,
     TransformFunction,
 } from "./types"
@@ -222,6 +223,7 @@ export interface MapperStore extends SelectionState, UndoRedoState, ClipboardSta
     setResourceId: (id: string | null) => void
     toggleExecutePanel: () => void
     setDSLMode: (enabled: boolean) => void
+    setScriptLanguage: (lang: ScriptLanguage) => void
 }
 
 // ============================================================
@@ -1467,6 +1469,13 @@ export const useMapperStore = create<MapperStore>()(
                     state.isDSLMode = enabled
                 })
             },
+
+            setScriptLanguage: (lang: ScriptLanguage) => {
+                set((state) => {
+                    state.mapperState.scriptLanguage = lang
+                    state.isDirty = true
+                })
+            },
         })),
     ),
 )
@@ -1491,3 +1500,5 @@ export const useCanRedo = () => useMapperStore((s) => s.canRedo())
 export const useIsDirty = () => useMapperStore((s) => s.isDirty)
 export const useIsSaving = () => useMapperStore((s) => s.isSaving)
 export const useSaveError = () => useMapperStore((s) => s.saveError)
+export const useScriptLanguage = () =>
+    useMapperStore((s) => s.mapperState.scriptLanguage ?? "javascript")

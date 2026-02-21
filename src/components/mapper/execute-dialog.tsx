@@ -5,6 +5,8 @@ import {
     ChevronLeft,
     ChevronRight,
     ChevronDown,
+    Coffee,
+    FileCode,
     Loader2,
     Play,
     RotateCcw,
@@ -30,7 +32,9 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { detectTemplateType, executeScript, generateScript } from "@/lib/mapper/engine"
-import { useMapperStore } from "@/lib/mapper/store"
+import { generateGroovyScript } from "@/lib/mapper/groovy-engine"
+import { checkGroovySidecar, executeGroovyScript } from "@/lib/mapper/groovy-executor.server"
+import { useMapperStore, useScriptLanguage } from "@/lib/mapper/store"
 import { treeToSample } from "@/lib/mapper/tree-to-sample"
 import { cn } from "@/lib/utils"
 
@@ -199,6 +203,7 @@ const readonlyEditorOptions = {
 
 export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
     const state = useMapperStore((s) => s.mapperState)
+    const scriptLanguage = useScriptLanguage()
 
     const [templateType, setTemplateType] = useState<TemplateType>(() => resolveTemplateType(state))
     const [inputText, setInputText] = useState(() => {
@@ -256,9 +261,19 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
     const hasTargetTree = !!state.targetTreeNode
     const canRun = hasSourceTree && hasTargetTree && !!inputText.trim() && !isRunning
 
+    const isGroovy = scriptLanguage === "groovy"
+    const scriptEditorLanguage = isGroovy ? "groovy" : "javascript"
+
+    function doGenerateScript(): string {
+        if (isGroovy) {
+            return generateGroovyScript(state, srcType, tgtType)
+        }
+        return generateScript(state, srcType, tgtType)
+    }
+
     function handleGenerateScript() {
         try {
-            const script = generateScript(state, srcType, tgtType)
+            const script = doGenerateScript()
             setScriptText(script)
             setIsScriptModified(false)
             setScriptPaneVisible(true)
@@ -273,7 +288,7 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
 
     function handleResetScript() {
         try {
-            const script = generateScript(state, srcType, tgtType)
+            const script = doGenerateScript()
             setScriptText(script)
             setIsScriptModified(false)
             setStatus({ type: "idle", message: "Script regenerated" })
@@ -281,6 +296,49 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
             setStatus({
                 type: "error",
                 message: err instanceof Error ? err.message : "Script generation failed",
+            })
+        }
+    }
+
+    async function handleRunGroovy(script: string, input: string) {
+        // Check sidecar availability
+        try {
+            const { available } = await checkGroovySidecar()
+            if (!available) {
+                setOutputText(
+                    "ERROR:\nGroovy execution service is not running.\n\nStart it with:\n  docker compose --profile groovy up -d\n\nOr switch to JavaScript in the toolbar to use client-side execution.",
+                )
+                setStatus({ type: "error", message: "Groovy sidecar offline" })
+                return
+            }
+        } catch {
+            setOutputText("ERROR:\nCould not reach Groovy execution service.")
+            setStatus({ type: "error", message: "Groovy sidecar unreachable" })
+            return
+        }
+
+        // Execute on server via sidecar
+        const result = await executeGroovyScript({
+            data: { script, input, timeout: 30 },
+        })
+
+        if (result.logs && result.logs.length > 0) {
+            setConsoleLogs(result.logs)
+            setConsoleExpanded(true)
+        }
+
+        if (result.error) {
+            setOutputText(`ERROR:\n${result.error}`)
+            setStatus({
+                type: "error",
+                message: `Error (${result.durationMs}ms)`,
+            })
+            setScriptPaneVisible(true)
+        } else {
+            setOutputText(result.output ?? "")
+            setStatus({
+                type: "success",
+                message: `Done (${result.durationMs}ms) via Groovy sidecar`,
             })
         }
     }
@@ -293,7 +351,10 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
         }
 
         setIsRunning(true)
-        setStatus({ type: "running", message: "Running..." })
+        setStatus({
+            type: "running",
+            message: isGroovy ? "Running on server (Groovy)..." : "Running...",
+        })
         setOutputText("")
         setConsoleLogs([])
 
@@ -302,33 +363,43 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
             // Only auto-generate if no script exists yet
             let script = scriptText
             if (!script) {
-                script = generateScript(state, srcType, tgtType)
+                script = doGenerateScript()
                 setScriptText(script)
                 setIsScriptModified(false)
             }
 
-            const result = await executeScript(script, input, state.localContext)
-
-            // Show captured logs and auto-expand if any exist
-            if (result.logs.length > 0) {
-                setConsoleLogs(result.logs)
-                setConsoleExpanded(true)
-            }
-
-            if (result.error) {
-                setOutputText(`ERROR:\n${result.error}`)
-                setStatus({
-                    type: "error",
-                    message: `Error (${result.durationMs.toFixed(0)}ms)`,
-                })
-                // Auto-show script pane on error for debugging
-                setScriptPaneVisible(true)
+            if (isGroovy) {
+                await handleRunGroovy(script, input)
             } else {
-                setOutputText(result.output)
-                setStatus({
-                    type: "success",
-                    message: `Done (${result.durationMs.toFixed(0)}ms)`,
+                // JavaScript: execute in browser
+                const injectShims = !!(
+                    state.scriptLanguage === "javascript" && state.sourceOriginalContent
+                )
+                const result = await executeScript(script, input, state.localContext, {
+                    injectGroovyShims: injectShims,
                 })
+
+                // Show captured logs and auto-expand if any exist
+                if (result.logs.length > 0) {
+                    setConsoleLogs(result.logs)
+                    setConsoleExpanded(true)
+                }
+
+                if (result.error) {
+                    setOutputText(`ERROR:\n${result.error}`)
+                    setStatus({
+                        type: "error",
+                        message: `Error (${result.durationMs.toFixed(0)}ms)`,
+                    })
+                    // Auto-show script pane on error for debugging
+                    setScriptPaneVisible(true)
+                } else {
+                    setOutputText(result.output)
+                    setStatus({
+                        type: "success",
+                        message: `Done (${result.durationMs.toFixed(0)}ms)`,
+                    })
+                }
             }
         } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
@@ -363,6 +434,18 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
                     <div className="flex items-center gap-3 flex-wrap">
                         <DialogTitle className="text-lg font-semibold">Execute Mapper</DialogTitle>
                         <TypeSelector value={templateType} onChange={setTemplateType} />
+
+                        {/* Script language badge */}
+                        <div className="flex items-center gap-1.5 text-xs rounded-full px-2.5 py-1 border border-glass-border bg-glass-bg/50">
+                            {isGroovy ? (
+                                <Coffee className="h-3 w-3 text-secondary" />
+                            ) : (
+                                <FileCode className="h-3 w-3 text-accent" />
+                            )}
+                            <span className={isGroovy ? "text-secondary" : "text-accent"}>
+                                {isGroovy ? "Groovy (server)" : "JavaScript (browser)"}
+                            </span>
+                        </div>
 
                         {/* Missing model warning */}
                         {(!hasSourceTree || !hasTargetTree) && (
@@ -448,7 +531,7 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
                                 <MonacoEditor
                                     height="100%"
                                     theme="vs-dark"
-                                    language="javascript"
+                                    language={scriptEditorLanguage}
                                     value={scriptText}
                                     onChange={(v) => {
                                         setScriptText(v ?? "")

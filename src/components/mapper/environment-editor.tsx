@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { useMapperStore, useMapperContext } from "@/lib/mapper/store"
+import { useMapperStore, useMapperContext, useScriptLanguage } from "@/lib/mapper/store"
 import type {
     GlobalVariable,
     LookupEntry,
@@ -296,7 +296,7 @@ function LookupTablesSection() {
 
 // ─── Functions ────────────────────────────────────────────────────────────────────
 
-function FunctionRow({ fn }: { fn: TransformFunction }) {
+function FunctionRow({ fn, isGroovy }: { fn: TransformFunction; isGroovy: boolean }) {
     const updateFunction = useMapperStore((s) => s.updateFunction)
     const removeFunction = useMapperStore((s) => s.removeFunction)
 
@@ -318,7 +318,11 @@ function FunctionRow({ fn }: { fn: TransformFunction }) {
             <Textarea
                 value={fn.body}
                 onChange={(e) => updateFunction(fn.id, { body: e.target.value })}
-                placeholder="function myFunc(a, b) { return a + b; }"
+                placeholder={
+                    isGroovy
+                        ? "def myFunc(a, b) { return a + b }"
+                        : "function myFunc(a, b) { return a + b; }"
+                }
                 className="text-xs font-mono rounded-none border-0 border-t border-glass-border resize-y min-h-[80px]"
                 spellCheck={false}
             />
@@ -329,12 +333,16 @@ function FunctionRow({ fn }: { fn: TransformFunction }) {
 function FunctionsSection() {
     const ctx = useMapperContext()
     const addFunction = useMapperStore((s) => s.addFunction)
+    const scriptLanguage = useScriptLanguage()
+    const isGroovy = scriptLanguage === "groovy"
 
     const handleAdd = () => {
         const fn: TransformFunction = {
             id: uuidv4(),
             name: "myFunction",
-            body: "function myFunction(value) {\n  return value;\n}",
+            body: isGroovy
+                ? "def myFunction(value) {\n  return value\n}"
+                : "function myFunction(value) {\n  return value;\n}",
         }
         addFunction(fn)
     }
@@ -345,7 +353,7 @@ function FunctionsSection() {
                 <p className="text-xs text-muted-foreground text-center py-2">No functions</p>
             )}
             {ctx.functions.map((fn) => (
-                <FunctionRow key={fn.id} fn={fn} />
+                <FunctionRow key={fn.id} fn={fn} isGroovy={isGroovy} />
             ))}
         </Section>
     )
@@ -357,6 +365,8 @@ function ScriptsSection() {
     const ctx = useMapperContext()
     const setPrologScript = useMapperStore((s) => s.setPrologScript)
     const setEpilogScript = useMapperStore((s) => s.setEpilogScript)
+    const scriptLanguage = useScriptLanguage()
+    const isGroovy = scriptLanguage === "groovy"
 
     return (
         <div className="space-y-3">
@@ -364,13 +374,17 @@ function ScriptsSection() {
                 <div className="px-4 py-3 border-b border-glass-border bg-muted/20">
                     <span className="text-sm font-semibold">Prolog Script</span>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                        Executed before the main mapping
+                        Executed before the main mapping ({isGroovy ? "Groovy" : "JavaScript"})
                     </p>
                 </div>
                 <Textarea
                     value={ctx.prologScript ?? ""}
                     onChange={(e) => setPrologScript(e.target.value || null)}
-                    placeholder="// Code to run before mapping..."
+                    placeholder={
+                        isGroovy
+                            ? "// Groovy code to run before mapping..."
+                            : "// Code to run before mapping..."
+                    }
                     className="text-xs font-mono rounded-none border-0 resize-y min-h-[100px]"
                     spellCheck={false}
                 />
@@ -380,13 +394,17 @@ function ScriptsSection() {
                 <div className="px-4 py-3 border-b border-glass-border bg-muted/20">
                     <span className="text-sm font-semibold">Epilog Script</span>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                        Executed after the main mapping
+                        Executed after the main mapping ({isGroovy ? "Groovy" : "JavaScript"})
                     </p>
                 </div>
                 <Textarea
                     value={ctx.epilogScript ?? ""}
                     onChange={(e) => setEpilogScript(e.target.value || null)}
-                    placeholder="// Code to run after mapping..."
+                    placeholder={
+                        isGroovy
+                            ? "// Groovy code to run after mapping..."
+                            : "// Code to run after mapping..."
+                    }
                     className="text-xs font-mono rounded-none border-0 resize-y min-h-[100px]"
                     spellCheck={false}
                 />
