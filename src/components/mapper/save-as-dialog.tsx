@@ -43,7 +43,9 @@ export function SaveAsDialog({ open, onClose }: SaveAsDialogProps) {
         }
         setSaving(true)
         try {
-            const id = saveToLocal(mapperState, trimmed)
+            // Embed the name into the state so downloads use it too
+            const stateWithName = { ...mapperState, name: trimmed }
+            const id = saveToLocal(stateWithName, trimmed)
             setCurrentResource(trimmed, id)
             setDirty(false)
             onClose()

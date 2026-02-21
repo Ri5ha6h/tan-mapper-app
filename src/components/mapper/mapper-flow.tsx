@@ -1,5 +1,5 @@
 import { DndContext, DragOverlay, pointerWithin } from "@dnd-kit/core"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core"
 import type { DragData } from "@/lib/mapper/types"
 
@@ -16,7 +16,33 @@ import { NodeEditorPanel } from "./node-editor/node-editor-panel"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useMapperStore } from "@/lib/mapper/store"
 
+// ─── Client-only guard ─────────────────────────────────────────────────────────
+// DndContext generates sequential IDs for aria-describedby that differ between
+// SSR and client hydration, causing React hydration mismatches. We skip SSR
+// rendering for the entire mapper by returning a stable placeholder on the server
+// and rendering the real component only on the client.
+const _subscribe = () => () => {}
+function useIsClient() {
+    return useSyncExternalStore(
+        _subscribe,
+        () => true, // client snapshot
+        () => false, // server snapshot
+    )
+}
+
 export function MapperFlow() {
+    const isClient = useIsClient()
+    if (!isClient) {
+        return (
+            <div className="flex-1 flex items-center justify-center">
+                <span className="text-sm text-muted-foreground/40">Loading mapper...</span>
+            </div>
+        )
+    }
+    return <MapperFlowInner />
+}
+
+function MapperFlowInner() {
     const sourceTree = useMapperStore((s) => s.mapperState.sourceTreeNode)
     const targetTree = useMapperStore((s) => s.mapperState.targetTreeNode)
     const addMapping = useMapperStore((s) => s.addMapping)

@@ -107,17 +107,22 @@ function RenameInput({ initialValue, onCommit, onCancel }: RenameInputProps) {
     )
 }
 
-// ─── Add Child inline dialog ────────────────────────────────────────────────────
+// ─── Add Node inline dialog ─────────────────────────────────────────────────────
 
-interface AddChildDialogProps {
-    parentId: string
+type AddNodeMode =
+    | { kind: "child"; parentId: string }
+    | { kind: "sibling"; siblingId: string; position: "above" | "below" }
+
+interface AddNodeDialogProps {
+    mode: AddNodeMode
     side: "source" | "target"
     defaultType?: MapperNodeType
     onDone: () => void
 }
 
-function AddChildDialog({ parentId, side, defaultType, onDone }: AddChildDialogProps) {
+function AddNodeDialog({ mode, side, defaultType, onDone }: AddNodeDialogProps) {
     const addChildNode = useMapperStore((s) => s.addChildNode)
+    const addSiblingNode = useMapperStore((s) => s.addSiblingNode)
     const snapshot = useMapperStore((s) => s.snapshot)
     const [name, setName] = useState("")
     const [type, setType] = useState<MapperNodeType>(defaultType ?? "element")
@@ -135,12 +140,23 @@ function AddChildDialog({ parentId, side, defaultType, onDone }: AddChildDialogP
         { value: "code", label: "Code </>" },
     ]
 
+    const title =
+        mode.kind === "child"
+            ? "Add Child Node"
+            : mode.position === "above"
+              ? "Add Node Above"
+              : "Add Node Below"
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         const trimmed = name.trim()
         if (!trimmed) return
         snapshot()
-        addChildNode(parentId, side, type, trimmed)
+        if (mode.kind === "child") {
+            addChildNode(mode.parentId, side, type, trimmed)
+        } else {
+            addSiblingNode(mode.siblingId, side, type, trimmed, mode.position)
+        }
         onDone()
     }
 
@@ -153,7 +169,7 @@ function AddChildDialog({ parentId, side, defaultType, onDone }: AddChildDialogP
                 className="bg-glass-bg backdrop-blur-xl border border-glass-border rounded-2xl shadow-2xl w-[340px] p-5 animate-modal-enter"
                 onClick={(e) => e.stopPropagation()}
             >
-                <h3 className="text-base font-semibold tracking-tight mb-4">Add Child Node</h3>
+                <h3 className="text-base font-semibold tracking-tight mb-4">{title}</h3>
                 <form onSubmit={handleSubmit} className="flex flex-col gap-3">
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs text-muted-foreground font-medium">Name</label>
@@ -236,8 +252,8 @@ export function TreeNode({
     const mapperState = useMapperStore((s) => s.mapperState)
 
     const [isRenaming, setIsRenaming] = useState(false)
-    const [addChildOpen, setAddChildOpen] = useState(false)
-    const [addChildDefaultType, setAddChildDefaultType] = useState<MapperNodeType | undefined>()
+    const [addNodeMode, setAddNodeMode] = useState<AddNodeMode | null>(null)
+    const [addNodeDefaultType, setAddNodeDefaultType] = useState<MapperNodeType | undefined>()
 
     const isExpanded = expandedNodes.has(node.id)
     const hasChildren = !!node.children && node.children.length > 0
@@ -296,8 +312,13 @@ export function TreeNode({
     }
 
     const handleOpenAddChild = (defaultType?: MapperNodeType) => {
-        setAddChildDefaultType(defaultType)
-        setAddChildOpen(true)
+        setAddNodeDefaultType(defaultType)
+        setAddNodeMode({ kind: "child", parentId: node.id })
+    }
+
+    const handleOpenAddSibling = (position: "above" | "below", defaultType?: MapperNodeType) => {
+        setAddNodeDefaultType(defaultType)
+        setAddNodeMode({ kind: "sibling", siblingId: node.id, position })
     }
 
     const rowClasses = cn(
@@ -313,12 +334,12 @@ export function TreeNode({
 
     return (
         <div className="select-none group/node">
-            {addChildOpen && (
-                <AddChildDialog
-                    parentId={node.id}
+            {addNodeMode && (
+                <AddNodeDialog
+                    mode={addNodeMode}
                     side={side}
-                    defaultType={addChildDefaultType}
-                    onDone={() => setAddChildOpen(false)}
+                    defaultType={addNodeDefaultType}
+                    onDone={() => setAddNodeMode(null)}
                 />
             )}
 
@@ -441,6 +462,72 @@ export function TreeNode({
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
 
+                                    <DropdownMenuSub>
+                                        <DropdownMenuSubTrigger>Add Node</DropdownMenuSubTrigger>
+                                        <DropdownMenuSubContent>
+                                            <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger>
+                                                    Above
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent>
+                                                    {TYPE_ICON_LABELS.map(
+                                                        ({ type, icon, iconClass, label }) => (
+                                                            <DropdownMenuItem
+                                                                key={type}
+                                                                onClick={() =>
+                                                                    handleOpenAddSibling(
+                                                                        "above",
+                                                                        type,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span
+                                                                    className={cn(
+                                                                        "w-5 font-mono text-xs font-semibold",
+                                                                        iconClass,
+                                                                    )}
+                                                                >
+                                                                    {icon}
+                                                                </span>
+                                                                {label}
+                                                            </DropdownMenuItem>
+                                                        ),
+                                                    )}
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                            <DropdownMenuSub>
+                                                <DropdownMenuSubTrigger>
+                                                    Below
+                                                </DropdownMenuSubTrigger>
+                                                <DropdownMenuSubContent>
+                                                    {TYPE_ICON_LABELS.map(
+                                                        ({ type, icon, iconClass, label }) => (
+                                                            <DropdownMenuItem
+                                                                key={type}
+                                                                onClick={() =>
+                                                                    handleOpenAddSibling(
+                                                                        "below",
+                                                                        type,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span
+                                                                    className={cn(
+                                                                        "w-5 font-mono text-xs font-semibold",
+                                                                        iconClass,
+                                                                    )}
+                                                                >
+                                                                    {icon}
+                                                                </span>
+                                                                {label}
+                                                            </DropdownMenuItem>
+                                                        ),
+                                                    )}
+                                                </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                        </DropdownMenuSubContent>
+                                    </DropdownMenuSub>
+
                                     <DropdownMenuItem onClick={() => setIsRenaming(true)}>
                                         Rename
                                     </DropdownMenuItem>
@@ -512,6 +599,54 @@ export function TreeNode({
                                     {label}
                                 </ContextMenuItem>
                             ))}
+                        </ContextMenuSubContent>
+                    </ContextMenuSub>
+
+                    <ContextMenuSub>
+                        <ContextMenuSubTrigger>Add Node</ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                            <ContextMenuSub>
+                                <ContextMenuSubTrigger>Above</ContextMenuSubTrigger>
+                                <ContextMenuSubContent>
+                                    {TYPE_ICON_LABELS.map(({ type, icon, iconClass, label }) => (
+                                        <ContextMenuItem
+                                            key={type}
+                                            onClick={() => handleOpenAddSibling("above", type)}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "w-5 font-mono text-xs font-semibold",
+                                                    iconClass,
+                                                )}
+                                            >
+                                                {icon}
+                                            </span>
+                                            {label}
+                                        </ContextMenuItem>
+                                    ))}
+                                </ContextMenuSubContent>
+                            </ContextMenuSub>
+                            <ContextMenuSub>
+                                <ContextMenuSubTrigger>Below</ContextMenuSubTrigger>
+                                <ContextMenuSubContent>
+                                    {TYPE_ICON_LABELS.map(({ type, icon, iconClass, label }) => (
+                                        <ContextMenuItem
+                                            key={type}
+                                            onClick={() => handleOpenAddSibling("below", type)}
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "w-5 font-mono text-xs font-semibold",
+                                                    iconClass,
+                                                )}
+                                            >
+                                                {icon}
+                                            </span>
+                                            {label}
+                                        </ContextMenuItem>
+                                    ))}
+                                </ContextMenuSubContent>
+                            </ContextMenuSub>
                         </ContextMenuSubContent>
                     </ContextMenuSub>
 

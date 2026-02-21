@@ -260,9 +260,52 @@ export function fromParserTreeNode(node: TreeNode): MapperTreeNode {
         mapperNode.sampleValue = node.value
     }
     if (node.children && node.children.length > 0) {
-        mapperNode.children = node.children.map(fromParserTreeNode)
+        if (node.type === "array") {
+            // Array children from the parser are concrete indexed elements like [0], [1].
+            // Normalise them into a single canonical arrayChild node named "[]" so the
+            // engine treats them as generic loop-item templates rather than literal
+            // indexed properties.  We merge all unique child field names into one
+            // representative arrayChild, preserving sample values from the first element.
+            mapperNode.children = [buildArrayChildNode(node.children)]
+        } else {
+            mapperNode.children = node.children.map(fromParserTreeNode)
+        }
     }
     return mapperNode
+}
+
+/**
+ * Build a single canonical arrayChild node from a list of concrete array-element
+ * TreeNodes (the [0], [1], … children produced by the JSON parser).
+ *
+ * Strategy: take all unique field keys across all elements and build one
+ * representative child set, using sample values from the first element.
+ */
+function buildArrayChildNode(items: TreeNode[]): MapperTreeNode {
+    // Collect unique child keys in order of first appearance
+    const seen = new Map<string, TreeNode>()
+    for (const item of items) {
+        if (item.children) {
+            for (const child of item.children) {
+                if (!seen.has(child.key)) seen.set(child.key, child)
+            }
+        }
+    }
+
+    const arrayChild: MapperTreeNode = {
+        id: uuidv4(),
+        name: "[]",
+        type: "arrayChild",
+    }
+
+    if (seen.size > 0) {
+        arrayChild.children = Array.from(seen.values()).map(fromParserTreeNode)
+    } else if (items.length > 0 && items[0].type === "primitive") {
+        // Array of primitives — arrayChild itself carries the sample value
+        arrayChild.sampleValue = items[0].value
+    }
+
+    return arrayChild
 }
 
 // ============================================================
@@ -339,6 +382,30 @@ export function insertChild(
         }
     }
     return tree
+}
+
+/**
+ * Insert a sibling node above or below the given sibling — returns new tree (immutable).
+ * Finds the parent of siblingId and inserts newNode adjacent to it.
+ */
+export function insertSibling(
+    tree: MapperTreeNode,
+    siblingId: string,
+    position: "above" | "below",
+    newNode: MapperTreeNode,
+): MapperTreeNode {
+    if (!tree.children) return tree
+    const idx = tree.children.findIndex((c) => c.id === siblingId)
+    if (idx !== -1) {
+        const insertIdx = position === "above" ? idx : idx + 1
+        const newChildren = [...tree.children]
+        newChildren.splice(insertIdx, 0, newNode)
+        return { ...tree, children: newChildren }
+    }
+    return {
+        ...tree,
+        children: tree.children.map((c) => insertSibling(c, siblingId, position, newNode)),
+    }
 }
 
 /**

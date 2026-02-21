@@ -26,6 +26,7 @@ import {
     updateNode,
 } from "../node-utils"
 import type { TreeNode } from "../types"
+import { parseJSON } from "../parsers"
 
 // ============================================================
 // Test fixtures
@@ -674,5 +675,90 @@ describe("mergeTrees MERGE", () => {
         expect(names).toContain("a")
         expect(names).toContain("new")
         expect(names).not.toContain("old")
+    })
+})
+
+// ============================================================
+// fromParserTreeNode — arrayChild normalisation
+// ============================================================
+
+describe("fromParserTreeNode - arrayChild normalisation", () => {
+    it("converts array children with [N] keys to a single arrayChild node named '[]'", () => {
+        const parsed = parseJSON(
+            JSON.stringify({
+                products: [
+                    { id: 1, name: "Laptop" },
+                    { id: 2, name: "Mouse" },
+                ],
+            }),
+        )
+        const root = fromParserTreeNode(parsed)
+
+        const products = root.children?.find((n) => n.name === "products")
+        expect(products).toBeDefined()
+        expect(products!.type).toBe("array")
+
+        // Should have exactly ONE child, not two ([0] and [1])
+        expect(products!.children).toHaveLength(1)
+        const arrayChild = products!.children![0]
+        expect(arrayChild.type).toBe("arrayChild")
+        expect(arrayChild.name).toBe("[]")
+    })
+
+    it("arrayChild has fields merged from all elements", () => {
+        const parsed = parseJSON(
+            JSON.stringify({
+                items: [
+                    { id: 1, price: 10 },
+                    { id: 2, price: 20 },
+                ],
+            }),
+        )
+        const root = fromParserTreeNode(parsed)
+        const arrayChild = root.children![0].children![0]
+        const fieldNames = arrayChild.children?.map((c) => c.name) ?? []
+        expect(fieldNames).toContain("id")
+        expect(fieldNames).toContain("price")
+    })
+
+    it("nested arrays are also normalised to a single arrayChild", () => {
+        const parsed = parseJSON(
+            JSON.stringify({
+                orders: [
+                    { id: 1, lines: [{ sku: "A" }, { sku: "B" }] },
+                    { id: 2, lines: [{ sku: "C" }] },
+                ],
+            }),
+        )
+        const root = fromParserTreeNode(parsed)
+        const ordersChild = root.children![0].children![0] // arrayChild of orders
+        expect(ordersChild.type).toBe("arrayChild")
+
+        const lines = ordersChild.children?.find((n) => n.name === "lines")
+        expect(lines?.type).toBe("array")
+        expect(lines?.children).toHaveLength(1)
+        expect(lines?.children![0].type).toBe("arrayChild")
+        expect(lines?.children![0].name).toBe("[]")
+    })
+
+    it("arrayChild for array-of-primitives has no children and carries sampleValue", () => {
+        const parsed = parseJSON(JSON.stringify({ tags: ["a", "b", "c"] }))
+        const root = fromParserTreeNode(parsed)
+        const tags = root.children![0]
+        expect(tags.type).toBe("array")
+        const child = tags.children![0]
+        expect(child.type).toBe("arrayChild")
+        expect(child.children).toBeUndefined()
+        expect(child.sampleValue).toBe("a")
+    })
+
+    it("getFullPath for a node inside normalised arrayChild does not include [N] segments", () => {
+        const parsed = parseJSON(JSON.stringify({ products: [{ id: 1, name: "Laptop" }] }))
+        const root = fromParserTreeNode(parsed)
+        const idNode = root.children![0].children![0].children!.find((n) => n.name === "id")!
+        const path = getFullPath(idNode.id, root)
+        // Should be "root.products.id" not "root.products.[0].id"
+        expect(path).toBe("root.products.id")
+        expect(path).not.toContain("[0]")
     })
 })

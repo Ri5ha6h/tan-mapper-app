@@ -26,6 +26,7 @@ import {
     findNodeById,
     groupNodes as groupNodesUtil,
     insertChild,
+    insertSibling,
     isLeaf,
     mergeTrees,
     moveNodeDown,
@@ -36,6 +37,7 @@ import {
 } from "./node-utils"
 import {
     collectUsedVariableNames,
+    createLoopReference,
     findNearestLoopAncestor,
     removeReferencesForSourceNode,
     suggestVariableName,
@@ -110,6 +112,13 @@ export interface MapperStore extends SelectionState, UndoRedoState, ClipboardSta
         side: "source" | "target",
         type: MapperNodeType,
         name: string,
+    ) => void
+    addSiblingNode: (
+        siblingId: string,
+        side: "source" | "target",
+        type: MapperNodeType,
+        name: string,
+        position: "above" | "below",
     ) => void
     deleteNodes: (nodeIds: string[], side: "source" | "target") => void
     updateNodeFields: (
@@ -213,7 +222,8 @@ export interface MapperStore extends SelectionState, UndoRedoState, ClipboardSta
 // Internal helpers
 // ============================================================
 
-/** Remove a reference by ID from a target node's sourceReferences array (immutable). */
+/** Remove a reference by ID from a target node's sourceReferences array (immutable).
+ *  Also clears the node's value if removing the last source reference. */
 function removeRefFromNode(node: MapperTreeNode, referenceId: string): MapperTreeNode {
     if (!node.sourceReferences && !node.loopReference) {
         if (node.children) {
@@ -233,6 +243,10 @@ function removeRefFromNode(node: MapperTreeNode, referenceId: string): MapperTre
         const filtered = node.sourceReferences.filter((r) => r.id !== referenceId)
         if (filtered.length !== node.sourceReferences.length) {
             updates.sourceReferences = filtered
+            // Clear value when last reference is removed
+            if (filtered.length === 0) {
+                updates.value = undefined
+            }
         }
     }
     const updated = { ...node, ...updates }
@@ -242,11 +256,12 @@ function removeRefFromNode(node: MapperTreeNode, referenceId: string): MapperTre
     return updated
 }
 
-/** Remove all sourceReferences from a specific target node (not descendants). */
+/** Remove all sourceReferences from a specific target node (not descendants), and clear its value. */
 function clearRefsFromNode(tree: MapperTreeNode, targetNodeId: string): MapperTreeNode {
     if (tree.id === targetNodeId) {
         const updated = { ...tree }
         delete updated.sourceReferences
+        delete updated.value
         return updated
     }
     if (tree.children) {
@@ -581,6 +596,37 @@ export const useMapperStore = create<MapperStore>()(
                 })
             },
 
+            addSiblingNode: (
+                siblingId: string,
+                side: "source" | "target",
+                type: MapperNodeType,
+                name: string,
+                position: "above" | "below",
+            ) => {
+                set((state) => {
+                    const tree =
+                        side === "source"
+                            ? state.mapperState.sourceTreeNode
+                            : state.mapperState.targetTreeNode
+                    if (!tree) return
+
+                    const newNode: MapperTreeNode = {
+                        id: uuidv4(),
+                        name,
+                        type,
+                    }
+                    const updated = insertSibling(tree, siblingId, position, newNode)
+
+                    if (side === "source") {
+                        state.mapperState.sourceTreeNode = updated
+                    } else {
+                        state.mapperState.targetTreeNode = updated
+                        state.mapperState.references = syncFlatReferences(state.mapperState)
+                    }
+                    state.isDirty = true
+                })
+            },
+
             deleteNodes: (nodeIds: string[], side: "source" | "target") => {
                 set((state) => {
                     if (side === "source") {
@@ -822,14 +868,16 @@ export const useMapperStore = create<MapperStore>()(
                     if (!state.mapperState.targetTreeNode) return
                     const targetNode = findNodeById(targetNodeId, state.mapperState.targetTreeNode)
                     if (!targetNode?.sourceReferences) return
+                    const remaining = targetNode.sourceReferences.filter((r) => r.id !== refId)
+                    const patch: Partial<MapperTreeNode> = { sourceReferences: remaining }
+                    // Clear value when last reference is removed
+                    if (remaining.length === 0) {
+                        patch.value = undefined
+                    }
                     state.mapperState.targetTreeNode = updateNode(
                         state.mapperState.targetTreeNode,
                         targetNodeId,
-                        {
-                            sourceReferences: targetNode.sourceReferences.filter(
-                                (r) => r.id !== refId,
-                            ),
-                        },
+                        patch,
                     )
                     state.mapperState.references = syncFlatReferences(state.mapperState)
                     state.isDirty = true
@@ -842,7 +890,7 @@ export const useMapperStore = create<MapperStore>()(
                     state.mapperState.targetTreeNode = updateNode(
                         state.mapperState.targetTreeNode,
                         targetNodeId,
-                        { sourceReferences: [] },
+                        { sourceReferences: [], value: undefined },
                     )
                     state.mapperState.references = syncFlatReferences(state.mapperState)
                     state.isDirty = true
@@ -856,9 +904,37 @@ export const useMapperStore = create<MapperStore>()(
                     const targetTree = state.mapperState.targetTreeNode
                     if (!sourceTree || !targetTree) return
 
-                    // Find target node
+                    // Find source and target nodes
+                    const sourceNode = findNodeById(sourceNodeId, sourceTree)
                     const targetNode = findNodeById(targetNodeId, targetTree)
-                    if (!targetNode) return
+                    if (!targetNode || !sourceNode) return
+
+                    // ── Array-to-array: auto-create a LoopReference ────────────
+                    const isSourceArray =
+                        sourceNode.type === "array" || sourceNode.type === "arrayChild"
+                    const isTargetArray =
+                        targetNode.type === "array" || targetNode.type === "arrayChild"
+
+                    if (isSourceArray && isTargetArray) {
+                        // Don't create a duplicate loop reference on this node
+                        if (targetNode.loopReference) return
+
+                        const usedNames = collectUsedVariableNames(state.mapperState)
+                        const varName = suggestVariableName(sourceNode.name ?? "var", usedNames)
+                        const iteratorName = `_${sourceNode.name ?? "item"}`
+
+                        const loopRef = createLoopReference(sourceNodeId, varName)
+
+                        state.mapperState.targetTreeNode = updateNode(targetTree, targetNodeId, {
+                            loopReference: loopRef,
+                            loopIterator: iteratorName,
+                        })
+                        state.mapperState.references = syncFlatReferences(state.mapperState)
+                        state.isDirty = true
+                        return
+                    }
+
+                    // ── Regular mapping ────────────────────────────────────────
 
                     // Check if source already referenced on this target
                     const alreadyReferenced = targetNode.sourceReferences?.some(
@@ -868,8 +944,7 @@ export const useMapperStore = create<MapperStore>()(
 
                     // Generate variable name
                     const usedNames = collectUsedVariableNames(state.mapperState)
-                    const sourceNode = findNodeById(sourceNodeId, sourceTree)
-                    const varName = suggestVariableName(sourceNode?.name ?? "var", usedNames)
+                    const varName = suggestVariableName(sourceNode.name ?? "var", usedNames)
 
                     // Find nearest loop ancestor for auto-assign
                     const loopRef = findNearestLoopAncestor(

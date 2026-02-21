@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react"
 import MonacoEditor from "@monaco-editor/react"
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Play, RotateCcw } from "lucide-react"
+import {
+    AlertTriangle,
+    ChevronLeft,
+    ChevronRight,
+    ChevronDown,
+    Loader2,
+    Play,
+    RotateCcw,
+    Terminal,
+} from "lucide-react"
 
 import type { TemplateType } from "@/lib/mapper/engine"
 import type { MapperState } from "@/lib/mapper/types"
@@ -200,6 +209,8 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
     const [scriptText, setScriptText] = useState("")
     const [isScriptModified, setIsScriptModified] = useState(false)
     const [outputText, setOutputText] = useState("")
+    const [consoleLogs, setConsoleLogs] = useState<string[]>([])
+    const [consoleExpanded, setConsoleExpanded] = useState(false)
     const [scriptPaneVisible, setScriptPaneVisible] = useState(false)
     const [isRunning, setIsRunning] = useState(false)
     const [status, setStatus] = useState<Status>({ type: "idle", message: "Ready" })
@@ -216,18 +227,21 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
     }, [state])
 
     // Re-populate input from source tree (or original file content) when the dialog opens or source tree changes
+    const sourceTreeNode = state.sourceTreeNode
+    const sourceOriginalContent = state.sourceOriginalContent ?? null
     useEffect(() => {
         if (open) {
-            if (state.sourceOriginalContent) {
-                setInputText(state.sourceOriginalContent)
+            if (sourceOriginalContent) {
+                setInputText(sourceOriginalContent)
             } else {
                 const lang = templateType.startsWith("xml") ? "xml" : "json"
-                const sample = treeToSample(state.sourceTreeNode, lang)
+                const sample = treeToSample(sourceTreeNode, lang)
                 setInputText(sample)
             }
         }
+        // templateType is intentionally excluded — we only re-populate when the dialog opens or source changes
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, state.sourceTreeNode, state.sourceOriginalContent])
+    }, [open, sourceTreeNode, sourceOriginalContent])
 
     // Sync template type when state's input types change
     useEffect(() => {
@@ -281,6 +295,7 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
         setIsRunning(true)
         setStatus({ type: "running", message: "Running..." })
         setOutputText("")
+        setConsoleLogs([])
 
         try {
             // Use whatever is currently in the script editor (hand-edited or auto-generated)
@@ -293,6 +308,12 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
             }
 
             const result = await executeScript(script, input, state.localContext)
+
+            // Show captured logs and auto-expand if any exist
+            if (result.logs.length > 0) {
+                setConsoleLogs(result.logs)
+                setConsoleExpanded(true)
+            }
 
             if (result.error) {
                 setOutputText(`ERROR:\n${result.error}`)
@@ -442,6 +463,52 @@ export function ExecuteDialog({ open, onClose }: ExecuteDialogProps) {
                     {/* Output pane */}
                     <div className="flex flex-col flex-1 min-w-0 min-h-0 border-l border-glass-border">
                         <PaneHeader label="Output" type={outputLang.toUpperCase()} side="target" />
+
+                        {/* Console log section — collapsible, auto-expands when logs present */}
+                        {consoleLogs.length > 0 && (
+                            <div className="shrink-0 border-b border-glass-border bg-[oklch(0.15_0.01_240/0.8)]">
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-2 w-full px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    onClick={() => setConsoleExpanded((v) => !v)}
+                                >
+                                    <Terminal className="h-3 w-3 text-accent shrink-0" />
+                                    <span className="font-mono font-medium text-accent">
+                                        Console
+                                    </span>
+                                    <span className="ml-1 text-muted-foreground/60">
+                                        ({consoleLogs.length}{" "}
+                                        {consoleLogs.length === 1 ? "message" : "messages"})
+                                    </span>
+                                    <ChevronDown
+                                        className={cn(
+                                            "h-3 w-3 ml-auto transition-transform duration-150",
+                                            consoleExpanded && "rotate-180",
+                                        )}
+                                    />
+                                </button>
+                                {consoleExpanded && (
+                                    <div className="max-h-36 overflow-y-auto px-3 pb-2 flex flex-col gap-0.5">
+                                        {consoleLogs.map((log, i) => (
+                                            <pre
+                                                key={i}
+                                                className={cn(
+                                                    "text-[11px] font-mono whitespace-pre-wrap break-all",
+                                                    log.startsWith("[error]")
+                                                        ? "text-destructive"
+                                                        : log.startsWith("[warn]")
+                                                          ? "text-amber-400"
+                                                          : "text-foreground/80",
+                                                )}
+                                            >
+                                                {log}
+                                            </pre>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="flex-1 min-h-0">
                             <MonacoEditor
                                 height="100%"

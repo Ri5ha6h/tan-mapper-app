@@ -12,7 +12,7 @@ import {
     generateScript,
     treeToData,
 } from "../engine"
-import { createEmptyMapperState, createNode } from "../node-utils"
+import { createEmptyMapperState, createNode, fromParserTreeNode } from "../node-utils"
 import { createLoopReference, createSourceReference } from "../reference-utils"
 import type {
     GlobalVariable,
@@ -21,7 +21,9 @@ import type {
     MapperState,
     MapperTreeNode,
     Mapping,
-    MappingCondition, SourceReference, TransformFunction 
+    MappingCondition,
+    SourceReference,
+    TransformFunction,
 } from "../types"
 
 const samplesDir = resolve(__dirname, "../../../../BasicMapperTestingSamples")
@@ -569,11 +571,14 @@ describe("generateScript - loops", () => {
         expect(script).toMatch(/for \(const _order of sourceData\.orders\)/)
     })
 
-    it("initializes the output array inside the loop", () => {
+    it("initializes the output array inside the loop (build-then-push pattern)", () => {
         const state = buildStateWithLoop()
         const script = generateScript(state, "json", "json")
         expect(script).toContain("output.items = output.items || []")
-        expect(script).toContain("output.items.push({})")
+        // Build-then-push: creates a temp object, not a direct push({})
+        expect(script).toMatch(/const _item_\d+ = \{\}/)
+        expect(script).toMatch(/if \(Object\.keys\(_item_\d+\)\.length > 0\)/)
+        expect(script).not.toContain("output.items.push({})")
     })
 
     it("declares loop-scoped ref vars inside the loop body", () => {
@@ -583,10 +588,12 @@ describe("generateScript - loops", () => {
         expect(script).toContain("const _orderId = _order.id")
     })
 
-    it("assigns loop-scoped ref to nested output path", () => {
+    it("assigns loop-scoped ref to temp item object (not length-1 index)", () => {
         const state = buildStateWithLoop()
         const script = generateScript(state, "json", "json")
-        expect(script).toContain("output.items[output.items.length - 1].orderId = _orderId")
+        // Build-then-push: assignments go to temp var, not arr[arr.length - 1]
+        expect(script).toMatch(/_item_\d+\.orderId = _orderId/)
+        expect(script).not.toContain("output.items[output.items.length - 1].orderId")
     })
 })
 
@@ -596,6 +603,149 @@ describe("generateScript - loop conditions", () => {
         const script = generateScript(state, "json", "json")
         expect(script).toContain("=== 'ACTIVE'")
         expect(script).toMatch(/if \(.*=== 'ACTIVE'\)/)
+    })
+})
+
+// ============================================================
+// Loop generation from parsed JSON trees (fromParserTreeNode)
+// ============================================================
+
+/**
+ * Build a MapperState from real parsed JSON trees (via parseJSON + fromParserTreeNode)
+ * and manually-wired loop references, simulating what the UI does when the user
+ * drags source array -> target array then drags a child field.
+ */
+function buildStateFromParsedJSON(): MapperState {
+    const state = createEmptyMapperState("JSON", "JSON")
+
+    // Parse the source tree from raw JSON — as the UI does
+    const rawSource = JSON.stringify({
+        products: [
+            { id: 1, name: "Laptop", price: 900 },
+            { id: 2, name: "Mouse", price: 20 },
+        ],
+    })
+    state.sourceTreeNode = fromParserTreeNode(parseJSON(rawSource))
+
+    // Parse the target tree from raw JSON schema
+    const rawTarget = JSON.stringify({
+        items: [{ productId: null, description: null }],
+    })
+    state.targetTreeNode = fromParserTreeNode(parseJSON(rawTarget))
+
+    // Wire the loop reference: products (array) → items (array)
+    const srcProducts = state.sourceTreeNode.children!.find((n) => n.name === "products")!
+    const tgtItems = state.targetTreeNode.children!.find((n) => n.name === "items")!
+    const tgtArrayChild = tgtItems.children![0] // the normalised "[]" arrayChild
+
+    const loopRef = createLoopReference(srcProducts.id, "_products")
+    tgtItems.loopReference = loopRef
+    tgtItems.loopIterator = "_product"
+
+    // Wire field refs: products.[].id → items.[].productId
+    const srcArrayChild = srcProducts.children![0] // the normalised "[]" arrayChild
+    const srcId = srcArrayChild.children!.find((n) => n.name === "id")!
+    const tgtProductId = tgtArrayChild.children!.find((n) => n.name === "productId")!
+
+    const idRef = createSourceReference(srcId.id, "_id", true, { loopOverId: loopRef.id })
+    tgtProductId.sourceReferences = [idRef]
+    tgtProductId.value = "_id"
+
+    state.references = [
+        {
+            id: idRef.id,
+            sourceNodeId: srcId.id,
+            targetNodeId: tgtProductId.id,
+            variableName: "_id",
+            textReference: true,
+            loopOverId: loopRef.id,
+        },
+    ]
+
+    return state
+}
+
+describe("generateScript - loops from parsed JSON trees", () => {
+    it("generates a correct for-loop from a tree built via parseJSON + fromParserTreeNode", () => {
+        const state = buildStateFromParsedJSON()
+        const script = generateScript(state, "json", "json")
+        expect(script).toMatch(/for \(const _product of sourceData\.products\)/)
+    })
+
+    it("initialises the output array inside the loop (build-then-push pattern)", () => {
+        const state = buildStateFromParsedJSON()
+        const script = generateScript(state, "json", "json")
+        expect(script).toContain("output.items = output.items || []")
+        // Build-then-push: creates a temp object, not a direct push({})
+        expect(script).toMatch(/const _item_\d+ = \{\}/)
+        expect(script).toMatch(/if \(Object\.keys\(_item_\d+\)\.length > 0\)/)
+        expect(script).not.toContain("output.items.push({})")
+    })
+
+    it("declares loop-scoped ref using iterator variable (not [N] accessor)", () => {
+        const state = buildStateFromParsedJSON()
+        const script = generateScript(state, "json", "json")
+        // Must be "_product.id", not "_product[\"[0]\"].id" or similar
+        expect(script).toContain("const _id = _product.id")
+        expect(script).not.toContain('"[0]"')
+        expect(script).not.toContain(".[0]")
+    })
+
+    it("assigns to temp item object (not length-1 indexing)", () => {
+        const state = buildStateFromParsedJSON()
+        const script = generateScript(state, "json", "json")
+        // Build-then-push: assignments go to temp var, not arr[arr.length - 1]
+        expect(script).toMatch(/_item_\d+\.productId = _id/)
+        expect(script).not.toContain("output.items[output.items.length - 1].productId")
+        expect(script).not.toContain("output.items.[0]")
+    })
+
+    it("executes correctly and produces expected JSON output", async () => {
+        const state = buildStateFromParsedJSON()
+        const script = generateScript(state, "json", "json")
+        const input = JSON.stringify({
+            products: [
+                { id: 1, name: "Laptop", price: 900 },
+                { id: 2, name: "Mouse", price: 20 },
+            ],
+        })
+        const result = await executeScript(script, input, state.localContext)
+        expect(result.error).toBeNull()
+        const output = JSON.parse(result.output)
+        expect(output.items).toHaveLength(2)
+        expect(output.items[0].productId).toBe(1)
+        expect(output.items[1].productId).toBe(2)
+    })
+})
+
+// ============================================================
+// loopStatement custom iterable expression
+// ============================================================
+
+describe("generateScript - loopStatement override", () => {
+    it("uses loopStatement as the iterable expression when set", () => {
+        const state = buildStateWithLoop()
+        // Add a loopStatement override on the target array (items)
+        const itemsNode = state.targetTreeNode!.children![0]
+        itemsNode.loopStatement = "myCustomList"
+        const script = generateScript(state, "json", "json")
+        expect(script).toMatch(/for \(const _order of myCustomList\)/)
+        // Should NOT fall back to sourceData.orders
+        expect(script).not.toContain("sourceData.orders")
+    })
+
+    it("still initialises output array and scoped refs when loopStatement is set", () => {
+        const state = buildStateWithLoop()
+        const itemsNode = state.targetTreeNode!.children![0]
+        itemsNode.loopStatement = "myCustomList"
+        const script = generateScript(state, "json", "json")
+        expect(script).toContain("output.items = output.items || []")
+        // Build-then-push: temp object created, pushed conditionally
+        expect(script).toMatch(/const _item_\d+ = \{\}/)
+        expect(script).toMatch(/_item_\d+\.orderId = _orderId/)
+        expect(script).toMatch(/output\.items\.push\(_item_\d+\)/)
+        expect(script).not.toContain("output.items.push({})")
+        expect(script).not.toContain("output.items[output.items.length - 1].orderId")
     })
 })
 
@@ -917,5 +1067,192 @@ describe("generateScript + executeScript integration", () => {
         const result = await executeScript(script, "{}", state.localContext)
         expect(result.error).toBeNull()
         expect(JSON.parse(result.output).orderId).toBe("hello")
+    })
+})
+
+// ============================================================
+// Build-then-push: conditional array item filtering
+// ============================================================
+
+/**
+ * Build a state where the target array's arrayChild has a nodeCondition.
+ * This simulates the scenario where the user sets a condition on the
+ * child group (e.g. "only include this item if name === 'Laptop'") —
+ * which is different from a loopCondition on the array node itself.
+ *
+ * source:  root → products (array) → [] (arrayChild) → id, name
+ * target:  root → items (array, loopRef) → [] (arrayChild, nodeCondition) → productId, description
+ */
+function buildStateWithNodeConditionOnArrayChild(conditionExpr: string): MapperState {
+    const state = createEmptyMapperState("JSON", "JSON")
+
+    // Source tree: root → products → [] → id, name
+    const srcId = createNode("id", "element")
+    const srcName = createNode("name", "element")
+    const srcArrayChild = createNode("[]", "arrayChild", { children: [srcId, srcName] })
+    const srcProducts = createNode("products", "array", { children: [srcArrayChild] })
+    state.sourceTreeNode = createNode("root", "element", { children: [srcProducts] })
+
+    // Loop reference at the arrayChild level
+    const loopRef = createLoopReference(srcArrayChild.id, "_products")
+
+    // Source references
+    const refId: SourceReference = createSourceReference(srcId.id, "_id", true, {
+        loopOverId: loopRef.id,
+    })
+    const refName: SourceReference = createSourceReference(srcName.id, "_name", true, {
+        loopOverId: loopRef.id,
+    })
+
+    // Target tree: root → items (array, loop) → [] (arrayChild, nodeCondition) → productId, description
+    const tgtProductId = createNode("productId", "element", { sourceReferences: [refId] })
+    const tgtDescription = createNode("description", "element", { sourceReferences: [refName] })
+    const tgtArrayChild = createNode("[]", "arrayChild", {
+        children: [tgtProductId, tgtDescription],
+        nodeCondition: { condition: conditionExpr },
+    })
+    const tgtItems = createNode("items", "array", {
+        loopReference: loopRef,
+        loopIterator: "_product",
+        children: [tgtArrayChild],
+    })
+    state.targetTreeNode = createNode("root", "element", { children: [tgtItems] })
+
+    state.references = [
+        {
+            id: refId.id,
+            sourceNodeId: srcId.id,
+            targetNodeId: tgtProductId.id,
+            variableName: "_id",
+            textReference: true,
+            loopOverId: loopRef.id,
+        },
+        {
+            id: refName.id,
+            sourceNodeId: srcName.id,
+            targetNodeId: tgtDescription.id,
+            variableName: "_name",
+            textReference: true,
+            loopOverId: loopRef.id,
+        },
+    ]
+
+    return state
+}
+
+describe("generateScript - build-then-push: no empty objects in output", () => {
+    it("does not emit push({}) — uses temp object instead", () => {
+        const state = buildStateWithLoop()
+        const script = generateScript(state, "json", "json")
+        expect(script).not.toContain(".push({})")
+        expect(script).toMatch(/const _item_\d+ = \{\}/)
+    })
+
+    it("emits Object.keys guard before pushing", () => {
+        const state = buildStateWithLoop()
+        const script = generateScript(state, "json", "json")
+        expect(script).toMatch(/if \(Object\.keys\(_item_\d+\)\.length > 0\)/)
+        expect(script).toMatch(/output\.items\.push\(_item_\d+\)/)
+    })
+
+    it("all items included when no conditions are set", async () => {
+        const state = buildStateWithLoop()
+        const script = generateScript(state, "json", "json")
+        const input = JSON.stringify({
+            orders: [{ id: "O1" }, { id: "O2" }, { id: "O3" }],
+        })
+        const result = await executeScript(script, input, emptyContext)
+        expect(result.error).toBeNull()
+        const parsed = JSON.parse(result.output)
+        expect(parsed.items).toHaveLength(3)
+        expect(parsed.items[0].orderId).toBe("O1")
+        expect(parsed.items[1].orderId).toBe("O2")
+        expect(parsed.items[2].orderId).toBe("O3")
+    })
+
+    it("loop condition if-block appears before temp object — non-matching items fully skipped", () => {
+        // Verify that the loopCondition if-block wraps the temp object creation, meaning
+        // non-matching items are skipped entirely and cannot produce empty {} entries.
+        const state = buildStateWithLoopCondition("=== 'ACTIVE'")
+        const script = generateScript(state, "json", "json")
+        // The condition guard must open before the temp item object is created
+        const condIdx = script.indexOf("=== 'ACTIVE'")
+        const itemIdx = script.search(/const _item_\d+ = \{\}/)
+        expect(condIdx).toBeGreaterThan(-1)
+        expect(itemIdx).toBeGreaterThan(-1)
+        expect(condIdx).toBeLessThan(itemIdx)
+    })
+
+    it("node condition on arrayChild filters items — no empty objects in output (the original bug)", async () => {
+        // This replicates the exact bug: condition on child group rather than loop,
+        // causing empty {} for non-matching items in the old push({}) pattern.
+        const state = buildStateWithNodeConditionOnArrayChild("_name === 'Laptop'")
+        const script = generateScript(state, "json", "json")
+        const input = JSON.stringify({
+            products: [
+                { id: 1, name: "Laptop" },
+                { id: 2, name: "Mouse" },
+                { id: 3, name: "Laptop" },
+            ],
+        })
+        const result = await executeScript(script, input, emptyContext)
+        expect(result.error).toBeNull()
+        const parsed = JSON.parse(result.output)
+        // Only Laptop items — no empty {} for Mouse
+        expect(parsed.items).toHaveLength(2)
+        expect(parsed.items[0].productId).toBe(1)
+        expect(parsed.items[1].productId).toBe(3)
+        expect(
+            parsed.items.every((item: Record<string, unknown>) => Object.keys(item).length > 0),
+        ).toBe(true)
+    })
+
+    it("node condition — all items pass when condition is always true", async () => {
+        const state = buildStateWithNodeConditionOnArrayChild("true")
+        const script = generateScript(state, "json", "json")
+        const input = JSON.stringify({
+            products: [
+                { id: 1, name: "A" },
+                { id: 2, name: "B" },
+            ],
+        })
+        const result = await executeScript(script, input, emptyContext)
+        expect(result.error).toBeNull()
+        const parsed = JSON.parse(result.output)
+        expect(parsed.items).toHaveLength(2)
+    })
+
+    it("node condition — no items when condition never matches", async () => {
+        const state = buildStateWithNodeConditionOnArrayChild("false")
+        const script = generateScript(state, "json", "json")
+        const input = JSON.stringify({
+            products: [
+                { id: 1, name: "X" },
+                { id: 2, name: "Y" },
+            ],
+        })
+        const result = await executeScript(script, input, emptyContext)
+        expect(result.error).toBeNull()
+        const parsed = JSON.parse(result.output)
+        // items array either absent or empty — never populated with empty {}
+        const items = parsed.items ?? []
+        expect(items).toHaveLength(0)
+    })
+
+    it("multiple condition operators: !== filter", async () => {
+        const state = buildStateWithNodeConditionOnArrayChild("_name !== 'Mouse'")
+        const script = generateScript(state, "json", "json")
+        const input = JSON.stringify({
+            products: [
+                { id: 1, name: "Laptop" },
+                { id: 2, name: "Mouse" },
+                { id: 3, name: "Keyboard" },
+            ],
+        })
+        const result = await executeScript(script, input, emptyContext)
+        expect(result.error).toBeNull()
+        const parsed = JSON.parse(result.output)
+        expect(parsed.items).toHaveLength(2)
+        expect(parsed.items.map((i: { productId: number }) => i.productId)).toEqual([1, 3])
     })
 })

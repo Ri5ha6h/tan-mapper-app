@@ -58,7 +58,9 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
             return
         }
         try {
-            saveToLocal(mapperState, currentResourceName, currentResourceId)
+            // Embed the name so downloads use it too
+            const stateWithName = { ...mapperState, name: currentResourceName }
+            saveToLocal(stateWithName, currentResourceName, currentResourceId)
             setDirty(false)
         } catch (err) {
             window.alert(err instanceof Error ? err.message : "Failed to save.")
@@ -66,7 +68,8 @@ export function MapperToolbar({ onAutoMapClick, onPreferencesClick }: MapperTool
     }
 
     function handleDownload() {
-        downloadAsJtmap(mapperState)
+        const filename = currentResourceName ? `${currentResourceName}.jtmap` : undefined
+        downloadAsJtmap(mapperState, filename)
     }
 
     return (

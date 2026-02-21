@@ -73,11 +73,16 @@ function parseSourceNode(raw: AnyObj, idMap: Map<string, string>): MapperTreeNod
 /**
  * Recursively parse a target tree from the old Vaadin format.
  * Wires sourceNodeIds via idMap, collecting loop refs for later wiring.
+ *
+ * loopRefMap  — new loopRef.id → LoopReference (for downstream use)
+ * loopJsonIdMap — old loopRef jsonId (string) → new loopRef UUID
+ *   Used to resolve old "loopOverRef" integer references in source refs.
  */
 function parseTargetNode(
     raw: AnyObj,
     idMap: Map<string, string>,
     loopRefMap: Map<string, LoopReference>,
+    loopJsonIdMap: Map<string, string> = new Map(),
 ): MapperTreeNode {
     const newId = uuidv4()
 
@@ -103,48 +108,107 @@ function parseTargetNode(
     if (raw["quote"] !== undefined) node.quote = bool(raw["quote"])
     if (raw["logBid"] !== undefined) node.logBid = bool(raw["logBid"])
 
-    // Loop reference (old format: loopReference object or loopSourceNodeId field)
+    // Loop reference
+    // New format: { id, sourceNodeId, variableName, textReference, isLoop }
+    // Old Vaadin format: { jsonId, path, var, text } — no sourceNodeId field
     const rawLoopRef = raw["loopReference"] ? obj(raw["loopReference"]) : null
 
-    if (rawLoopRef && rawLoopRef["sourceNodeId"]) {
-        const oldSourceId = str(rawLoopRef["sourceNodeId"])
+    if (rawLoopRef) {
+        // Resolve the source node ID — new format has sourceNodeId; old format has jsonId
+        const oldSourceId =
+            rawLoopRef["sourceNodeId"] !== undefined ? str(rawLoopRef["sourceNodeId"]) : undefined
         const oldJsonId =
             rawLoopRef["jsonId"] !== undefined ? String(rawLoopRef["jsonId"]) : undefined
-        const mappedSourceId = idMap.get(oldSourceId) ?? idMap.get(oldJsonId ?? "") ?? oldSourceId
-        const lr: LoopReference = {
-            id: str(rawLoopRef["id"] ?? uuidv4()),
-            sourceNodeId: mappedSourceId,
-            variableName: str(rawLoopRef["variableName"] ?? `_loop${uuidv4().slice(0, 4)}`),
-            textReference: bool(rawLoopRef["textReference"]),
-            isLoop: true,
+        const mappedSourceId =
+            (oldSourceId ? idMap.get(oldSourceId) : undefined) ??
+            (oldJsonId ? idMap.get(oldJsonId) : undefined) ??
+            oldSourceId ??
+            oldJsonId ??
+            ""
+
+        if (mappedSourceId) {
+            // Resolve variable name — new format: variableName; old format: var
+            const variableName = str(
+                rawLoopRef["variableName"] ?? rawLoopRef["var"] ?? `_loop${uuidv4().slice(0, 4)}`,
+            )
+            // Resolve textReference — new format: textReference (boolean); old format: text (boolean)
+            const textReference = bool(rawLoopRef["textReference"] ?? rawLoopRef["text"])
+
+            const lr: LoopReference = {
+                id: str(rawLoopRef["id"] ?? uuidv4()),
+                sourceNodeId: mappedSourceId,
+                variableName,
+                textReference,
+                isLoop: true,
+            }
+            node.loopReference = lr
+            // loopIterator: new format field or old format "loopIterator" on the node itself
+            node.loopIterator = str(raw["loopIterator"] ?? lr.variableName)
+            loopRefMap.set(lr.id, lr)
+
+            // Register in loopJsonIdMap so child refs can resolve loopOverRef by old jsonId.
+            // Old format: loopReference.jsonId is the jsonId of the source array node.
+            // "loopOverRef: N" in source refs means "belongs to the loop whose source jsonId = N".
+            if (oldJsonId) loopJsonIdMap.set(oldJsonId, lr.id)
+            // Also register by the loop's own old id if present
+            if (rawLoopRef["id"]) loopJsonIdMap.set(str(rawLoopRef["id"]), lr.id)
         }
-        node.loopReference = lr
-        node.loopIterator = str(raw["loopIterator"] ?? lr.variableName)
-        loopRefMap.set(lr.id, lr)
     }
 
+    // loopStatement (custom iterable expression — used for code-node-driven loops)
+    // Old format may store it inside a "looper" object as "loopStatement"
+    const rawLooper = raw["looper"] ? obj(raw["looper"]) : null
+    const loopStatementRaw =
+        raw["loopStatement"] !== undefined ? raw["loopStatement"] : rawLooper?.["loopStatement"]
+    if (loopStatementRaw) node.loopStatement = str(loopStatementRaw)
+
+    // codeValue on arrayChild nodes (old format uses this instead of customCode)
+    if (raw["codeValue"] !== undefined) node.customCode = str(raw["codeValue"])
+
     // Source references
-    const rawSourceRefs = arr(raw["sourceReferences"] ?? raw["sourceRefs"])
+    // New format: "sourceReferences" or "sourceRefs"; fields: sourceNodeId, variableName, textReference, loopOverId
+    // Old Vaadin format: "references"; fields: jsonId, path, var, text, loopOverRef
+    const rawSourceRefs = arr(raw["sourceReferences"] ?? raw["sourceRefs"] ?? raw["references"])
     if (rawSourceRefs.length > 0) {
         node.sourceReferences = rawSourceRefs.map((r) => {
             const rawRef = obj(r)
-            const oldSourceId = str(rawRef["sourceNodeId"])
+
+            // Resolve source node ID
+            const oldSourceId =
+                rawRef["sourceNodeId"] !== undefined ? str(rawRef["sourceNodeId"]) : undefined
             const oldJsonId = rawRef["jsonId"] !== undefined ? String(rawRef["jsonId"]) : undefined
             const mappedSourceId =
-                idMap.get(oldSourceId) ?? idMap.get(oldJsonId ?? "") ?? oldSourceId
+                (oldSourceId ? idMap.get(oldSourceId) : undefined) ??
+                (oldJsonId ? idMap.get(oldJsonId) : undefined) ??
+                oldSourceId ??
+                oldJsonId ??
+                ""
 
-            // loopOverId may be stored as a jsonId integer referencing a loop ref
-            const loopOverJsonId =
-                rawRef["loopOverId"] !== undefined ? String(rawRef["loopOverId"]) : undefined
-            const loopOverId = loopOverJsonId
-                ? (idMap.get(loopOverJsonId) ?? loopOverJsonId)
+            // Resolve loopOverId — new format: loopOverId (UUID); old format: loopOverRef (integer jsonId)
+            // loopOverRef points to the jsonId of the loop source node, which is the same
+            // value used as loopReference.jsonId.  We resolve via loopJsonIdMap first
+            // (maps old-jsonId → new loopRef UUID), falling back to idMap for new-format UUIDs.
+            const loopOverRaw =
+                rawRef["loopOverId"] !== undefined
+                    ? String(rawRef["loopOverId"])
+                    : rawRef["loopOverRef"] !== undefined
+                      ? String(rawRef["loopOverRef"])
+                      : undefined
+            const loopOverId = loopOverRaw
+                ? (loopJsonIdMap.get(loopOverRaw) ?? idMap.get(loopOverRaw) ?? loopOverRaw)
                 : undefined
+
+            // Variable name — new format: variableName; old format: var
+            const variableName = str(rawRef["variableName"] ?? rawRef["var"] ?? "var0")
+
+            // Text reference — new format: textReference; old format: text
+            const textReference = bool(rawRef["textReference"] ?? rawRef["text"], true)
 
             const ref: SourceReference = {
                 id: str(rawRef["id"] ?? uuidv4()),
                 sourceNodeId: mappedSourceId,
-                variableName: str(rawRef["variableName"] ?? "var0"),
-                textReference: bool(rawRef["textReference"], true),
+                variableName,
+                textReference,
             }
             if (loopOverId) ref.loopOverId = loopOverId
             if (rawRef["customPath"]) ref.customPath = str(rawRef["customPath"])
@@ -161,10 +225,12 @@ function parseTargetNode(
         }
     }
 
-    // Children
+    // Children — pass loopJsonIdMap down so nested nodes can resolve loopOverRef
     const rawChildren = arr(raw["children"])
     if (rawChildren.length > 0) {
-        node.children = rawChildren.map((c) => parseTargetNode(obj(c), idMap, loopRefMap))
+        node.children = rawChildren.map((c) =>
+            parseTargetNode(obj(c), idMap, loopRefMap, loopJsonIdMap),
+        )
     }
 
     return node
@@ -179,6 +245,9 @@ function normalizeNodeType(raw: string): MapperTreeNode["type"] {
         attribute: "attribute",
         "xml-attribute": "attribute",
         array: "array",
+        // Old Vaadin shorthand types
+        ar: "array",
+        ac: "arrayChild",
         arraychild: "arrayChild",
         arrayChild: "arrayChild",
         "array-child": "arrayChild",

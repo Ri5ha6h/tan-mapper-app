@@ -333,3 +333,201 @@ describe("Migration round-trip", () => {
         expect(loopRef?.variableName).toBe("_orders")
     })
 })
+
+// ============================================================
+// migrateFromJtmap — old Vaadin .jtmap format edge cases
+// ============================================================
+
+describe("migrateFromJtmap - old Vaadin format", () => {
+    it("normalises old 'ar' type to 'array' and 'ac' type to 'arrayChild'", () => {
+        const legacy = {
+            modelVersion: 3,
+            sourceInputType: "JSON",
+            targetInputType: "JSON",
+            sourceTreeNode: {
+                jsonId: 1,
+                name: "root",
+                type: "element",
+                children: [
+                    {
+                        jsonId: 2,
+                        name: "products",
+                        type: "ar", // old Vaadin shorthand for array
+                        children: [
+                            {
+                                jsonId: 3,
+                                name: "[0]",
+                                type: "ac", // old Vaadin shorthand for arrayChild
+                                children: [{ jsonId: 4, name: "id", type: "element" }],
+                            },
+                        ],
+                    },
+                ],
+            },
+            targetTreeNode: { name: "root", type: "element", children: [] },
+            localContext: { globalVariables: [], lookupTables: [], functions: [] },
+            mapperPreferences: {
+                debugComment: false,
+                overrideTargetValue: true,
+                autoMap: false,
+                autoMapOneToMany: false,
+                autoMapIncludeSubNodes: false,
+            },
+        }
+        const result = deserializeMapperState(JSON.stringify(legacy))
+        const products = result.sourceTreeNode?.children?.[0]
+        expect(products?.type).toBe("array")
+        const item = products?.children?.[0]
+        expect(item?.type).toBe("arrayChild")
+    })
+
+    it("migrates old loopReference format (path + var + jsonId) correctly", () => {
+        // Mirrors the structure of MapperWithMappingSample3_Rishabh.jtmap
+        const legacy = {
+            modelVersion: 3,
+            sourceInputType: "JSON",
+            targetInputType: "JSON",
+            sourceTreeNode: {
+                name: "root",
+                type: "element",
+                children: [
+                    {
+                        jsonId: 1,
+                        name: "products",
+                        type: "ar",
+                        children: [
+                            {
+                                jsonId: 2,
+                                name: "[0]",
+                                type: "ac",
+                                children: [{ jsonId: 3, name: "id", type: "element" }],
+                            },
+                        ],
+                    },
+                ],
+            },
+            targetTreeNode: {
+                name: "root",
+                type: "element",
+                children: [
+                    {
+                        name: "items",
+                        type: "ar",
+                        children: [
+                            {
+                                name: "[0]",
+                                type: "ac",
+                                loopIterator: "it_Products",
+                                loopReference: {
+                                    jsonId: 1,
+                                    path: "root.products",
+                                    var: "loop123",
+                                    text: false,
+                                },
+                                references: [
+                                    {
+                                        jsonId: 1,
+                                        path: "root.products",
+                                        var: "loop123",
+                                        text: false,
+                                    },
+                                ],
+                                children: [
+                                    {
+                                        name: "productId",
+                                        type: "element",
+                                        value: "_id",
+                                        references: [
+                                            {
+                                                jsonId: 3,
+                                                path: "root.products.id",
+                                                var: "_id",
+                                                text: true,
+                                                loopOverRef: 1,
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+            localContext: { globalVariables: [], lookupTables: [], functions: [] },
+            mapperPreferences: {
+                debugComment: false,
+                overrideTargetValue: true,
+                autoMap: false,
+                autoMapOneToMany: false,
+                autoMapIncludeSubNodes: false,
+            },
+        }
+
+        const result = deserializeMapperState(JSON.stringify(legacy))
+
+        // Target array should have loopReference with resolved sourceNodeId
+        const itemsArr = result.targetTreeNode?.children?.[0]
+        expect(itemsArr?.type).toBe("array")
+        const acNode = itemsArr?.children?.[0]
+        expect(acNode?.type).toBe("arrayChild")
+
+        // loopReference must be populated (not dropped)
+        expect(acNode?.loopReference).toBeDefined()
+        expect(acNode?.loopIterator).toBe("it_Products")
+        expect(acNode?.loopReference?.variableName).toBe("loop123")
+
+        // The sourceNodeId in the loop reference should be a valid UUID mapping to "products"
+        const srcProducts = result.sourceTreeNode?.children?.[0]
+        expect(acNode?.loopReference?.sourceNodeId).toBe(srcProducts?.id)
+
+        // Source ref on productId should use "var" → variableName
+        const productId = acNode?.children?.[0]
+        expect(productId?.sourceReferences?.[0]?.variableName).toBe("_id")
+        expect(productId?.sourceReferences?.[0]?.textReference).toBe(true)
+
+        // loopOverRef should be resolved to the loop reference's new UUID
+        expect(productId?.sourceReferences?.[0]?.loopOverId).toBe(acNode?.loopReference?.id)
+    })
+
+    it("migrates looper.loopStatement to node.loopStatement", () => {
+        const legacy = {
+            modelVersion: 3,
+            sourceInputType: "JSON",
+            targetInputType: "JSON",
+            sourceTreeNode: { name: "root", type: "element", children: [] },
+            targetTreeNode: {
+                name: "root",
+                type: "element",
+                children: [
+                    {
+                        name: "stops",
+                        type: "ar",
+                        children: [
+                            {
+                                name: "[0]",
+                                type: "ac",
+                                looper: { loopStatement: "stopMap.each" },
+                                codeValue: "const stopType = it.value.stopType",
+                                children: [],
+                            },
+                        ],
+                    },
+                ],
+            },
+            localContext: { globalVariables: [], lookupTables: [], functions: [] },
+            mapperPreferences: {
+                debugComment: false,
+                overrideTargetValue: true,
+                autoMap: false,
+                autoMapOneToMany: false,
+                autoMapIncludeSubNodes: false,
+            },
+        }
+
+        const result = deserializeMapperState(JSON.stringify(legacy))
+        const stopsArr = result.targetTreeNode?.children?.[0]
+        const acNode = stopsArr?.children?.[0]
+        expect(acNode?.loopStatement).toBe("stopMap.each")
+        expect(acNode?.customCode).toBe("const stopType = it.value.stopType")
+    })
+})

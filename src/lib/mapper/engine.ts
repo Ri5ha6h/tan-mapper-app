@@ -27,6 +27,7 @@ export interface ScriptExecutionResult {
     error: string | null // Error message if execution failed
     scriptBody: string // The generated script (for debug display)
     durationMs: number // Execution time
+    logs: string[] // Captured console.log/warn/error messages
 }
 
 export type TemplateType = "json_to_json" | "json_to_xml" | "xml_to_json" | "xml_to_xml"
@@ -248,15 +249,25 @@ function parseXMLInput(xmlString: string): unknown {
 // ============================================================
 
 /**
+ * Returns true for path segments that represent an array-child placeholder.
+ * Covers the canonical "[]" marker as well as the concrete indexed forms
+ * "[0]", "[1]", … that the JSON parser may have preserved when the tree
+ * was not yet normalised through fromParserTreeNode.
+ */
+function isArrayChildSegment(segment: string): boolean {
+    return segment === "[]" || /^\[\d+\]$/.test(segment)
+}
+
+/**
  * Convert a node path fragment (from getFullPath) to a valid JS accessor.
  * - Strips the leading "root" segment (the tree root node name)
- * - "[]" parts are stripped (arrayChild does not add a property key)
+ * - "[]" and "[N]" parts are stripped (arrayChild does not add a property key)
  * - Attribute nodes produce "@name" — encoded as ["@name"]
  * - Regular names become .name
  */
 function encodePath(rawPath: string): string {
     if (!rawPath) return ""
-    const parts = rawPath.split(".").filter((p) => p !== "" && p !== "[]")
+    const parts = rawPath.split(".").filter((p) => p !== "" && !isArrayChildSegment(p))
 
     // Strip the leading "root" segment — it is the synthetic root node name,
     // not a real property in the data.
@@ -304,8 +315,9 @@ function buildSourceAccessPath(
             relativePath = fullPath.slice(loopSourcePath.length).replace(/^\./, "")
         }
 
-        // Remove the arrayChild "[]" marker at the start if present
-        relativePath = relativePath.replace(/^\[\]\.?/, "")
+        // Remove the arrayChild marker at the start if present.
+        // Covers the canonical "[]" form as well as concrete "[0]", "[1]" etc.
+        relativePath = relativePath.replace(/^\[\d*\]\.?/, "")
 
         if (!relativePath) return iterVar
         const encoded = encodePath(relativePath)
@@ -447,6 +459,7 @@ function buildOutputPath(
     node: MapperTreeNode,
     outputVar: string,
     targetTree: MapperTreeNode,
+    arrayTempVars?: Map<string, string>,
 ): string {
     // Get the ancestor chain from root's children down to (and including) this node.
     // The root node itself is excluded — we start from its children.
@@ -456,16 +469,26 @@ function buildOutputPath(
 
     let accessor = outputVar
     let prevWasLoopArray = false
+    let prevLoopArrayId: string | null = null
 
     for (const ancestor of chain) {
         // arrayChild nodes are transparent — they don't add a named property.
-        // But if the previous node was an array with a loop, we need to index into it.
-        if (ancestor.type === "arrayChild") {
+        // Also treat nodes with names like "[0]", "[1]" as arrayChild equivalents
+        // (safety net for trees that were not normalised through fromParserTreeNode).
+        const isArrayChildLike = ancestor.type === "arrayChild" || /^\[\d*\]$/.test(ancestor.name)
+        if (isArrayChildLike) {
             if (prevWasLoopArray) {
-                // Replace last accessor segment with [length-1] index
-                // e.g. "output.items" → "output.items[output.items.length - 1]"
-                accessor = `${accessor}[${accessor}.length - 1]`
+                // If a temp variable exists for this array (build-then-push mode),
+                // use the temp var instead of arr[arr.length - 1]
+                const tempVar = prevLoopArrayId ? arrayTempVars?.get(prevLoopArrayId) : undefined
+                if (tempVar) {
+                    accessor = tempVar
+                } else {
+                    // Fallback: original arr[arr.length - 1] pattern
+                    accessor = `${accessor}[${accessor}.length - 1]`
+                }
                 prevWasLoopArray = false
+                prevLoopArrayId = null
             }
             continue
         }
@@ -480,6 +503,9 @@ function buildOutputPath(
         // If this is an array with a loop reference, mark so the next arrayChild
         // (or direct child for items without an explicit arrayChild) gets indexed
         prevWasLoopArray = ancestor.type === "array" && !!ancestor.loopReference
+        if (prevWasLoopArray) {
+            prevLoopArrayId = ancestor.id
+        }
     }
 
     return accessor
@@ -581,6 +607,7 @@ function generateTargetNode(
     indentLevel: number,
     activeLoopRef: LoopReference | null,
     activeIterVar: string | null,
+    arrayTempVars?: Map<string, string>,
 ): string {
     const lines: Array<string> = []
     let indent = "  ".repeat(indentLevel)
@@ -602,8 +629,15 @@ function generateTargetNode(
 
     // 3. Loop reference
     const loopRef = node.loopReference
+    // Hoisted so section 5b can access them after the if(loopRef) block closes
+    let arrayTempVar: string | null = null
+    let arrayArrPath: string | null = null
     if (loopRef) {
-        const loopSource = buildLoopSourcePath(loopRef, state.sourceTreeNode!)
+        // loopStatement lets callers override the iterable expression entirely —
+        // e.g. "myCodeVar" when the loop source is a variable built by a code node.
+        const loopSource = node.loopStatement
+            ? node.loopStatement
+            : buildLoopSourcePath(loopRef, state.sourceTreeNode!)
         const iterVar = node.loopIterator || `_${loopRef.variableName}`
         lines.push(`${indent}for (const ${iterVar} of ${loopSource}) {`)
         indentLevel++
@@ -621,11 +655,19 @@ function generateTargetNode(
             indent = "  ".repeat(indentLevel)
         }
 
-        // 3b. Initialize array target if this is an array node
+        // 3b. Initialize array target if this is an array node (build-then-push pattern)
+        // Instead of pushing {} immediately and assigning via arr[arr.length - 1],
+        // we create a temp object and only push it if it ends up with properties.
+        // This prevents empty {} entries when child node conditions filter out all fields.
         if (node.type === "array") {
-            const arrPath = buildOutputPath(node, outputVar, state.targetTreeNode!)
+            const arrPath = buildOutputPath(node, outputVar, state.targetTreeNode!, arrayTempVars)
+            arrayArrPath = arrPath
             lines.push(`${indent}${arrPath} = ${arrPath} || []`)
-            lines.push(`${indent}${arrPath}.push({})`)
+            arrayTempVar = `_item_${indentLevel}`
+            lines.push(`${indent}const ${arrayTempVar} = {}`)
+            // Register temp var so child buildOutputPath calls resolve to it
+            if (!arrayTempVars) arrayTempVars = new Map()
+            arrayTempVars.set(node.id, arrayTempVar)
         }
 
         // 3c. Declare refs scoped to this loop
@@ -646,7 +688,7 @@ function generateTargetNode(
     // 4. Set value on this node (leaf assignment)
     const valueExpr = buildValueExpression(node)
     if (valueExpr !== null && node.type !== "array" && node.type !== "arrayChild") {
-        const outputPath = buildOutputPath(node, outputVar, state.targetTreeNode!)
+        const outputPath = buildOutputPath(node, outputVar, state.targetTreeNode!, arrayTempVars)
         let line = `${indent}${outputPath} = ${valueExpr}`
 
         // Debug comment
@@ -667,8 +709,17 @@ function generateTargetNode(
             indentLevel,
             childLoopRef,
             childIterVar,
+            arrayTempVars,
         )
         if (childCode) lines.push(childCode)
+    }
+
+    // 5b. Conditional push — only add the temp item to the array if it has properties.
+    // This is the completion of the build-then-push pattern started in section 3b.
+    if (loopRef && arrayTempVar && arrayArrPath) {
+        lines.push(`${indent}if (Object.keys(${arrayTempVar}).length > 0) {`)
+        lines.push(`${indent}  ${arrayArrPath}.push(${arrayTempVar})`)
+        lines.push(`${indent}}`)
     }
 
     // 6. Close loop conditions if block
@@ -805,6 +856,32 @@ export async function executeScript(
     _context: MapperContext,
 ): Promise<ScriptExecutionResult> {
     const start = performance.now()
+    const capturedLogs: string[] = []
+
+    // Intercept console methods to capture output
+    const origLog = console.log
+    const origWarn = console.warn
+    const origError = console.error
+
+    const formatArgs = (prefix: string, args: unknown[]): string => {
+        const msg = args
+            .map((a) => (typeof a === "object" ? JSON.stringify(a) : String(a)))
+            .join(" ")
+        return prefix ? `[${prefix}] ${msg}` : msg
+    }
+
+    console.log = (...args: unknown[]) => {
+        capturedLogs.push(formatArgs("", args))
+        origLog.apply(console, args)
+    }
+    console.warn = (...args: unknown[]) => {
+        capturedLogs.push(formatArgs("warn", args))
+        origWarn.apply(console, args)
+    }
+    console.error = (...args: unknown[]) => {
+        capturedLogs.push(formatArgs("error", args))
+        origError.apply(console, args)
+    }
 
     try {
         const fullScript = `"use strict";\n${scriptBody}`
@@ -823,6 +900,7 @@ export async function executeScript(
             error: null,
             scriptBody,
             durationMs: performance.now() - start,
+            logs: capturedLogs,
         }
     } catch (err) {
         return {
@@ -830,6 +908,12 @@ export async function executeScript(
             error: err instanceof Error ? err.message : String(err),
             scriptBody,
             durationMs: performance.now() - start,
+            logs: capturedLogs,
         }
+    } finally {
+        // Always restore console methods
+        console.log = origLog
+        console.warn = origWarn
+        console.error = origError
     }
 }
