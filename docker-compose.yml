@@ -1,0 +1,21 @@
+services:
+    tan-postgres:
+        image: postgres:16-alpine
+        container_name: tan-mapper-postgres
+        restart: unless-stopped
+        ports:
+            - "5435:5432"
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-mapper}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mapper_dev}
+            POSTGRES_DB: ${POSTGRES_DB:-tan_mapper}
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U mapper"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+volumes:
+    pgdata:
