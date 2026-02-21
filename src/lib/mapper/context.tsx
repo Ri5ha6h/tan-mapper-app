@@ -1,3 +1,14 @@
+/**
+ * context.tsx — Backward compatibility shim
+ *
+ * The mapper state is now managed by Zustand in `store.ts`.
+ * This file is kept to avoid breaking existing components that import
+ * `MapperProvider` or `useMapper`.
+ *
+ * Migration path:
+ *   - Replace `useMapper()` calls with `useMapperStore(selector)` from `./store`
+ *   - Once all components are migrated, this file can be deleted
+ */
 import { createContext, useContext, useReducer } from "react"
 import { insertNodeInTree } from "./utils"
 import type { ReactNode } from "react"
@@ -251,3 +262,6 @@ export function useMapper() {
     }
     return ctx
 }
+
+// Re-export the new Zustand store for components migrating away from context
+export { useMapperStore } from "./store"

@@ -1,2 +1,30 @@
 export { MapperFlow } from "./mapper-flow"
-export { MapperProvider } from "@/lib/mapper/context"
+export { MapperToolbar } from "./mapper-toolbar"
+export { TreeView } from "./tree-view"
+export { TreeNode } from "./tree-node"
+export { ConnectionLines } from "./connection-lines"
+export { ReferencesPanel } from "./references-panel"
+export { EnvironmentEditor } from "./environment-editor"
+export { AutoMapDialog } from "./auto-map-dialog"
+export { PreferencesDialog } from "./preferences-dialog"
+export { FileUpload } from "./file-upload"
+// Phase 7 — File Upload Wizards
+export { UploadModelDialog } from "./upload-model-dialog"
+// Phase 5 — Node Editor
+export { NodeEditorPanel } from "./node-editor/node-editor-panel"
+export { ValueEditor } from "./node-editor/value-editor"
+export { SourceRefsEditor } from "./node-editor/source-refs-editor"
+export { LoopEditor } from "./node-editor/loop-editor"
+export { LoopConditionsEditor } from "./node-editor/loop-conditions-editor"
+export { ConditionEditor } from "./node-editor/condition-editor"
+export { SourceNodeEditor } from "./node-editor/source-node-editor"
+export { SourceTreePicker } from "./node-editor/source-tree-picker"
+export { InsertValueMenu } from "./node-editor/insert-value-menu"
+// Phase 8 — Execute / Test Panel
+export { ExecuteDialog } from "./execute-dialog"
+export { ExecutePanel } from "./execute-panel"
+// Phase 9 — Excel Import/Export
+export { UploadExcelDialog } from "./upload-excel-dialog"
+// Phase 10 — Persistence & File I/O
+export { OpenMapDialog } from "./open-map-dialog"
+export { SaveAsDialog } from "./save-as-dialog"

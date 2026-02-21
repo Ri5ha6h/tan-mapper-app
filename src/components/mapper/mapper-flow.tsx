@@ -1,24 +1,46 @@
 import { DndContext, DragOverlay, pointerWithin } from "@dnd-kit/core"
-import { ArrowRight, FileCode, GripVertical, Trash2, X } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core"
+import type { DragData } from "@/lib/mapper/types"
+
 import { ConnectionLines } from "./connection-lines"
 import { FileUpload } from "./file-upload"
 import { TreeView } from "./tree-view"
-import { GenerateModal } from "./generate-modal"
-import type { DragData, MappingTransform } from "@/lib/mapper/types"
-import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { useMapper } from "@/lib/mapper/context"
+import { MapperToolbar } from "./mapper-toolbar"
+import { ReferencesPanel } from "./references-panel"
+import { AutoMapDialog } from "./auto-map-dialog"
+import { PreferencesDialog } from "./preferences-dialog"
+import { EnvironmentEditor } from "./environment-editor"
+import { NodeEditorPanel } from "./node-editor/node-editor-panel"
+
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { useMapperStore } from "@/lib/mapper/store"
 
 export function MapperFlow() {
-    const { source, target, mappings, setMappings, addMapping, removeMapping } = useMapper()
-    const containerRef = useRef<HTMLDivElement>(null)
+    const sourceTree = useMapperStore((s) => s.mapperState.sourceTreeNode)
+    const targetTree = useMapperStore((s) => s.mapperState.targetTreeNode)
+    const addMapping = useMapperStore((s) => s.addMapping)
+    const snapshot = useMapperStore((s) => s.snapshot)
+    const references = useMapperStore((s) => s.mapperState.references)
 
+    // beforeunload guard — warn when leaving with unsaved changes
+    useEffect(() => {
+        const handler = (e: BeforeUnloadEvent) => {
+            if (useMapperStore.getState().isDirty) {
+                e.preventDefault()
+                e.returnValue = ""
+            }
+        }
+        window.addEventListener("beforeunload", handler)
+        return () => window.removeEventListener("beforeunload", handler)
+    }, [])
+
+    const containerRef = useRef<HTMLDivElement>(null)
     const [sourceRefs, setSourceRefs] = useState<Map<string, HTMLElement>>(new Map())
     const [targetRefs, setTargetRefs] = useState<Map<string, HTMLElement>>(new Map())
     const [activeId, setActiveId] = useState<string | null>(null)
-    const [generateModalOpen, setGenerateModalOpen] = useState(false)
+    const [autoMapOpen, setAutoMapOpen] = useState(false)
+    const [preferencesOpen, setPreferencesOpen] = useState(false)
 
     const handleSourceRefs = (refs: Map<string, HTMLElement>) => {
         setSourceRefs((prev) => {
@@ -46,187 +68,152 @@ export function MapperFlow() {
 
     const handleDragEnd = (event: DragEndEvent) => {
         setActiveId(null)
-
         const { active, over } = event
         if (!over) return
 
         const activeData = active.data.current as DragData | undefined
         const overData = over.data.current as DragData | undefined
 
-        // Must be dragging from source to target
         if (activeData?.side !== "source" || overData?.side !== "target") return
 
+        snapshot()
         addMapping(activeData.nodeId, overData.nodeId)
     }
 
     return (
-        <DndContext
-            collisionDetection={pointerWithin}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-        >
-            <div className="flex flex-col h-full gap-5">
-                {/* Upload row */}
-                <div className="flex items-center justify-between px-6 animate-fade-in-up animate-stagger-2">
-                    <FileUpload side="source" />
-                    <FileUpload side="target" />
+        <div className="flex flex-col h-full">
+            {/* Toolbar */}
+            <MapperToolbar
+                onAutoMapClick={() => setAutoMapOpen(true)}
+                onPreferencesClick={() => setPreferencesOpen(true)}
+            />
+
+            {/* Tab layout */}
+            <Tabs defaultValue="mapper" className="flex-1 flex flex-col min-h-0">
+                <div className="px-6 pt-3 pb-0 shrink-0">
+                    <TabsList>
+                        <TabsTrigger value="mapper">Mapper</TabsTrigger>
+                        <TabsTrigger value="references">
+                            References
+                            {references.length > 0 && (
+                                <span className="ml-1.5 text-xs px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-mono">
+                                    {references.length}
+                                </span>
+                            )}
+                        </TabsTrigger>
+                        <TabsTrigger value="environment">Environment</TabsTrigger>
+                    </TabsList>
                 </div>
 
-                {/* Trees container */}
-                <div
-                    ref={containerRef}
-                    className="flex-1 relative flex gap-5 px-6 min-h-0 animate-fade-in-up animate-stagger-3"
-                >
-                    {/* Source tree */}
-                    <div className="flex-1 overflow-hidden rounded-xl bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg">
-                        <div className="px-4 py-2.5 border-b border-glass-border bg-muted/20">
-                            <span className="text-sm font-medium text-source">Source</span>
-                        </div>
-                        <div className="h-[calc(100%-44px)]">
-                            <TreeView
-                                tree={source?.tree ?? null}
-                                side="source"
-                                onNodeRefs={handleSourceRefs}
-                            />
-                        </div>
-                    </div>
+                {/* ── Mapper tab ── */}
+                <TabsContent value="mapper" className="flex-1 min-h-0 flex flex-col">
+                    <DndContext
+                        collisionDetection={pointerWithin}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                    >
+                        <div className="flex-1 min-h-0 flex gap-0">
+                            {/* Left 60% — file upload + trees */}
+                            <div className="flex-[3] flex flex-col min-w-0 min-h-0 p-4 gap-3">
+                                {/* Upload row */}
+                                <div className="flex items-center justify-between shrink-0">
+                                    <FileUpload side="source" />
+                                    <FileUpload side="target" />
+                                </div>
 
-                    {/* Connection lines */}
-                    <ConnectionLines
-                        sourceRefs={sourceRefs}
-                        targetRefs={targetRefs}
-                        containerRef={containerRef as React.RefObject<HTMLElement | null>}
-                    />
-
-                    {/* Target tree */}
-                    <div className="flex-1 overflow-hidden rounded-xl bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg">
-                        <div className="px-4 py-2.5 border-b border-glass-border bg-muted/20">
-                            <span className="text-sm font-medium text-target">Target</span>
-                        </div>
-                        <div className="h-[calc(100%-44px)]">
-                            <TreeView
-                                tree={target?.tree ?? null}
-                                side="target"
-                                onNodeRefs={handleTargetRefs}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Mappings list */}
-                <div className="mx-6 mb-6 rounded-xl bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg animate-fade-in-up animate-stagger-4">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-glass-border bg-muted/20">
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">Mappings</span>
-                            <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-primary/15 text-primary">
-                                {mappings.length}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setMappings([])}
-                                disabled={mappings.length === 0}
-                                className="rounded-full"
-                            >
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Clear
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setGenerateModalOpen(true)}
-                                disabled={mappings.length === 0 || !source || !target}
-                                className="rounded-full"
-                            >
-                                <FileCode className="h-4 w-4 mr-1" />
-                                Generate Result
-                            </Button>
-                        </div>
-                    </div>
-                    <ScrollArea className="max-h-[150px]">
-                        {mappings.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-8 text-sm text-muted-foreground animate-fade-in-up">
-                                <GripVertical className="h-8 w-8 mb-2 opacity-30" />
-                                Drag from source to target to create mappings
-                            </div>
-                        ) : (
-                            <div className="p-2 space-y-1">
-                                {mappings.map((mapping) => (
-                                    <div
-                                        key={mapping.id}
-                                        className="flex items-center justify-between px-4 py-2 rounded-full bg-muted/30 hover:bg-muted/50 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2 text-sm font-mono flex-wrap">
-                                            <span className="text-source">
-                                                {formatNodeId(mapping.sourceId)}
+                                {/* Trees container */}
+                                <div
+                                    ref={containerRef}
+                                    className="flex-1 relative flex gap-4 min-h-0"
+                                >
+                                    {/* Source tree */}
+                                    <div className="flex-1 overflow-hidden rounded-xl bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg min-h-0">
+                                        <div className="px-4 py-2.5 border-b border-glass-border bg-muted/20 shrink-0">
+                                            <span className="text-sm font-medium text-source">
+                                                Source
                                             </span>
-                                            <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                                            <span className="text-target">
-                                                {formatNodeId(mapping.targetId)}
-                                            </span>
-                                            {mapping.condition && (
-                                                <span className="px-2 py-0.5 rounded-full bg-accent/15 text-accent text-xs font-medium font-sans">
-                                                    IF {formatNodeId(mapping.condition.field)}{" "}
-                                                    {mapping.condition.operator}{" "}
-                                                    {mapping.condition.value}
-                                                </span>
-                                            )}
-                                            {mapping.transform && (
-                                                <span className="px-2 py-0.5 rounded-full bg-chart-5/15 text-chart-5 text-xs font-medium font-sans">
-                                                    {displayTransform(mapping.transform)}
-                                                </span>
-                                            )}
                                         </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => removeMapping(mapping.id)}
-                                            className="h-6 w-6 rounded-full"
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </Button>
+                                        <div className="h-[calc(100%-44px)]">
+                                            <TreeView
+                                                tree={sourceTree}
+                                                side="source"
+                                                onNodeRefs={handleSourceRefs}
+                                            />
+                                        </div>
                                     </div>
-                                ))}
+
+                                    {/* Connection SVG lines */}
+                                    <ConnectionLines
+                                        sourceRefs={sourceRefs}
+                                        targetRefs={targetRefs}
+                                        containerRef={
+                                            containerRef as React.RefObject<HTMLElement | null>
+                                        }
+                                    />
+
+                                    {/* Target tree */}
+                                    <div className="flex-1 overflow-hidden rounded-xl bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg min-h-0">
+                                        <div className="px-4 py-2.5 border-b border-glass-border bg-muted/20 shrink-0">
+                                            <span className="text-sm font-medium text-target">
+                                                Target
+                                            </span>
+                                        </div>
+                                        <div className="h-[calc(100%-44px)]">
+                                            <TreeView
+                                                tree={targetTree}
+                                                side="target"
+                                                onNodeRefs={handleTargetRefs}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        )}
-                    </ScrollArea>
-                </div>
-            </div>
 
-            {/* Drag overlay */}
-            <DragOverlay>
-                {activeId ? (
-                    <div className="px-4 py-1.5 bg-primary text-primary-foreground rounded-full text-sm font-medium shadow-xl shadow-primary/25">
-                        {activeId.replace("drag-", "")}
+                            {/* Right 40% — Node Editor Panel (Phase 5) */}
+                            <div className="flex-[2] border-l border-glass-border min-w-0 min-h-0 flex flex-col">
+                                <div className="px-4 py-2.5 border-b border-glass-border bg-muted/20 shrink-0">
+                                    <span className="text-sm font-medium text-muted-foreground">
+                                        Node Editor
+                                    </span>
+                                </div>
+                                <div className="flex-1 min-h-0 overflow-hidden">
+                                    <NodeEditorPanel />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Drag overlay */}
+                        <DragOverlay>
+                            {activeId ? (
+                                <div className="px-4 py-1.5 bg-primary text-primary-foreground rounded-full text-sm font-medium shadow-xl shadow-primary/25">
+                                    {activeId.replace("drag-", "").split("-")[0]}
+                                </div>
+                            ) : null}
+                        </DragOverlay>
+                    </DndContext>
+                </TabsContent>
+
+                {/* ── References tab ── */}
+                <TabsContent value="references" className="flex-1 min-h-0 p-4">
+                    <div className="h-full rounded-xl bg-glass-bg backdrop-blur-xl border border-glass-border shadow-lg overflow-hidden">
+                        <div className="px-4 py-2.5 border-b border-glass-border bg-muted/20 shrink-0">
+                            <span className="text-sm font-medium">All References</span>
+                        </div>
+                        <div className="h-[calc(100%-44px)]">
+                            <ReferencesPanel />
+                        </div>
                     </div>
-                ) : null}
-            </DragOverlay>
+                </TabsContent>
 
-            <GenerateModal open={generateModalOpen} onOpenChange={setGenerateModalOpen} />
-        </DndContext>
+                {/* ── Environment tab ── */}
+                <TabsContent value="environment" className="flex-1 min-h-0">
+                    <EnvironmentEditor />
+                </TabsContent>
+            </Tabs>
+
+            {/* Dialogs */}
+            <AutoMapDialog open={autoMapOpen} onOpenChange={setAutoMapOpen} />
+            <PreferencesDialog open={preferencesOpen} onOpenChange={setPreferencesOpen} />
+        </div>
     )
-}
-
-function formatNodeId(id: string): string {
-    // Remove "root." prefix for display
-    return id.replace(/^root\.?/, "") || "root"
-}
-
-function displayTransform(t: MappingTransform): string {
-    switch (t.type) {
-        case "add":
-            return `+${t.value}`
-        case "subtract":
-            return `-${t.value}`
-        case "multiply":
-            return `*${t.value}`
-        case "divide":
-            return `/${t.value}`
-        case "add_percent":
-            return `+${t.value}%`
-        case "subtract_percent":
-            return `-${t.value}%`
-    }
 }

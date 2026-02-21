@@ -8,61 +8,80 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as rootRouteImport } from "./routes/__root"
+import { Route as IndexRouteImport } from "./routes/index"
+import { Route as MapChainRouteImport } from "./routes/map-chain"
 
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
+    id: "/",
+    path: "/",
+    getParentRoute: () => rootRouteImport,
+} as any)
+
+const MapChainRoute = MapChainRouteImport.update({
+    id: "/map-chain",
+    path: "/map-chain",
+    getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+    "/": typeof IndexRoute
+    "/map-chain": typeof MapChainRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+    "/": typeof IndexRoute
+    "/map-chain": typeof MapChainRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+    __root__: typeof rootRouteImport
+    "/": typeof IndexRoute
+    "/map-chain": typeof MapChainRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
-  fileRoutesById: FileRoutesById
+    fileRoutesByFullPath: FileRoutesByFullPath
+    fullPaths: "/" | "/map-chain"
+    fileRoutesByTo: FileRoutesByTo
+    to: "/" | "/map-chain"
+    id: "__root__" | "/" | "/map-chain"
+    fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+    IndexRoute: typeof IndexRoute
+    MapChainRoute: typeof MapChainRoute
 }
 
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+declare module "@tanstack/react-router" {
+    interface FileRoutesByPath {
+        "/": {
+            id: "/"
+            path: "/"
+            fullPath: "/"
+            preLoaderRoute: typeof IndexRouteImport
+            parentRoute: typeof rootRouteImport
+        }
+        "/map-chain": {
+            id: "/map-chain"
+            path: "/map-chain"
+            fullPath: "/map-chain"
+            preLoaderRoute: typeof MapChainRouteImport
+            parentRoute: typeof rootRouteImport
+        }
     }
-  }
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+    IndexRoute: IndexRoute,
+    MapChainRoute: MapChainRoute,
 }
 export const routeTree = rootRouteImport
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+    ._addFileChildren(rootRouteChildren)
+    ._addFileTypes<FileRouteTypes>()
 
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
+import type { getRouter } from "./router.tsx"
+import type { createStart } from "@tanstack/react-start"
+declare module "@tanstack/react-start" {
+    interface Register {
+        ssr: true
+        router: Awaited<ReturnType<typeof getRouter>>
+    }
 }

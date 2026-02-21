@@ -1,74 +1,67 @@
 import { useDraggable, useDroppable } from "@dnd-kit/core"
-import {
-    AtSign,
-    ChevronRight,
-    FileText,
-    Folder,
-    Hash,
-    List,
-    Pencil,
-    Plus,
-    Trash2,
-    X,
-} from "lucide-react"
-import { useState } from "react"
-import { AddNodeDialog } from "./add-node-dialog"
-import { EditMappingModal } from "./edit-mapping-modal"
-import type { DragData, NodeType, TreeNode as TreeNodeType } from "@/lib/mapper/types"
-import { useMapper } from "@/lib/mapper/context"
-import { createNewTreeNode } from "@/lib/mapper/utils"
+import { ChevronRight, Link2 } from "lucide-react"
+import type { DragData, MapperNodeType, MapperTreeNode } from "@/lib/mapper/types"
+import { useMapperStore } from "@/lib/mapper/store"
 import { cn } from "@/lib/utils"
-import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuSeparator,
-    ContextMenuSub,
-    ContextMenuSubContent,
-    ContextMenuSubTrigger,
-    ContextMenuTrigger,
-} from "@/components/ui/context-menu"
 
 interface TreeNodeProps {
-    node: TreeNodeType
+    node: MapperTreeNode
     side: "source" | "target"
     onNodeRef?: (id: string, el: HTMLElement | null) => void
+    expandedNodes: Set<string>
+    onToggleExpand: (id: string) => void
+    selectedNodeId: string | null
+    depth?: number
 }
 
-const NODE_TYPES: Array<{ label: string; value: NodeType; Icon: typeof FileText }> = [
-    { label: "Normal", value: "primitive", Icon: FileText },
-    { label: "Array", value: "array", Icon: List },
-    { label: "Object", value: "object", Icon: Folder },
-]
+// ─── Type Icon ─────────────────────────────────────────────────────────────────
 
-export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
-    const {
-        isExpanded: checkExpanded,
-        toggleExpand,
-        mappings,
-        removeMappingsForNode,
-        addTreeNode,
-        updateMappingRule,
-    } = useMapper()
-    const isExpanded = checkExpanded(node.id, side)
-    const hasChildren = node.children && node.children.length > 0
+function NodeTypeIcon({ type }: { type: MapperNodeType }) {
+    const config: Record<MapperNodeType, { label: string; className: string }> = {
+        element: { label: "{}", className: "bg-secondary/20 text-secondary" },
+        array: { label: "[]", className: "bg-accent/20 text-accent" },
+        arrayChild: { label: "·", className: "bg-accent/15 text-accent/70" },
+        attribute: { label: "@", className: "bg-amber-500/20 text-amber-400" },
+        code: { label: "</>", className: "bg-primary/20 text-primary" },
+    }
+    const { label, className } = config[type] ?? config.element
+    return (
+        <span
+            className={cn(
+                "inline-flex items-center justify-center w-5 h-5 rounded-full",
+                "text-[10px] font-mono font-semibold shrink-0",
+                className,
+            )}
+        >
+            {label}
+        </span>
+    )
+}
 
-    // Check if this node is mapped
-    const nodeMapping =
-        side === "source"
-            ? mappings.find((m) => m.sourceId === node.id)
-            : mappings.find((m) => m.targetId === node.id)
-    const isMapped = !!nodeMapping
+// ─── TreeNode ──────────────────────────────────────────────────────────────────
 
-    // Add node dialog state
-    const [addDialogOpen, setAddDialogOpen] = useState(false)
-    const [addPosition, setAddPosition] = useState<"above" | "below" | "inside">("below")
-    const [addNodeType, setAddNodeType] = useState<NodeType>("primitive")
+export function TreeNode({
+    node,
+    side,
+    onNodeRef,
+    expandedNodes,
+    onToggleExpand,
+    selectedNodeId,
+    depth = 0,
+}: TreeNodeProps) {
+    const clearNodeMappings = useMapperStore((s) => s.clearNodeMappings)
+    const selectSourceNode = useMapperStore((s) => s.selectSourceNode)
+    const selectTargetNode = useMapperStore((s) => s.selectTargetNode)
 
-    // Edit mapping modal state
-    const [editModalOpen, setEditModalOpen] = useState(false)
+    const isExpanded = expandedNodes.has(node.id)
+    const hasChildren = !!node.children && node.children.length > 0
+    const isSelected = selectedNodeId === node.id
 
-    // Drag (source side only)
+    // Mapping indicators (target side only)
+    const isMapped = side === "target" && !!node.sourceReferences?.length
+    const hasLoopReference = side === "target" && !!node.loopReference
+
+    // ─── Drag (source side only) ────────────────────────────────────────────────
     const dragData: DragData = { nodeId: node.id, side }
     const {
         attributes: dragAttrs,
@@ -81,7 +74,7 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
         disabled: side !== "source",
     })
 
-    // Drop (target side only)
+    // ─── Drop (target side only) ────────────────────────────────────────────────
     const { setNodeRef: setDropRef, isOver } = useDroppable({
         id: `drop-${node.id}`,
         data: { nodeId: node.id, side },
@@ -98,168 +91,107 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
         onNodeRef?.(node.id, el)
     }
 
-    const { icon: TypeIcon, colorClass: iconColor } = getTypeIcon(node.type)
-
-    const canAddInside =
-        node.type === "object" || node.type === "array" || node.type === "xml-element"
-
-    const handleAddNode = (position: "above" | "below" | "inside", type: NodeType) => {
-        setAddPosition(position)
-        setAddNodeType(type)
-        setAddDialogOpen(true)
+    const handleRowClick = () => {
+        if (side === "source") {
+            selectSourceNode(node.id)
+        } else {
+            selectTargetNode(node.id)
+        }
     }
-
-    const handleConfirmAdd = (key: string) => {
-        const newNode = createNewTreeNode(
-            addPosition === "inside" ? node.id : node.id.split(".").slice(0, -1).join("."),
-            key,
-            addNodeType as "primitive" | "array" | "object",
-            addPosition === "inside" ? node.depth + 1 : node.depth,
-        )
-        addTreeNode(node.id, side, addPosition, newNode)
-    }
-
-    const renderAddSubmenu = (position: "above" | "below" | "inside") => (
-        <ContextMenuSub>
-            <ContextMenuSubTrigger className="capitalize">
-                {position === "above" && "Above"}
-                {position === "below" && "Below"}
-                {position === "inside" && "Inside"}
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent>
-                {NODE_TYPES.map(({ label, value, Icon }) => (
-                    <ContextMenuItem key={value} onSelect={() => handleAddNode(position, value)}>
-                        <Icon
-                            className={cn(
-                                "h-4 w-4",
-                                value === "object"
-                                    ? "text-secondary"
-                                    : value === "array"
-                                      ? "text-accent"
-                                      : "text-source",
-                            )}
-                        />
-                        {label}
-                    </ContextMenuItem>
-                ))}
-            </ContextMenuSubContent>
-        </ContextMenuSub>
-    )
 
     return (
         <div className="select-none">
-            <ContextMenu>
-                <ContextMenuTrigger>
-                    <div
-                        ref={setRef}
-                        className={cn(
-                            "flex items-center gap-1.5 px-3 py-1.5 rounded-full cursor-pointer",
-                            "hover:bg-muted/40 hover:scale-[1.01] transition-all duration-150",
-                            isDragging && "opacity-50",
-                            isOver && "bg-target/10 ring-2 ring-target/50 scale-[1.02]",
-                            isMapped && "bg-mapped/10 animate-mapped-glow",
-                        )}
-                        style={{ paddingLeft: `${node.depth * 20 + 12}px` }}
-                        {...(side === "source" ? { ...dragAttrs, ...dragListeners } : {})}
+            {/* Node row */}
+            <div
+                ref={setRef}
+                className={cn(
+                    "flex items-center gap-1.5 pr-3 py-1 rounded-full cursor-pointer",
+                    "hover:bg-muted/40 transition-all duration-150",
+                    isDragging && "opacity-50",
+                    isOver && "bg-target/10 ring-2 ring-target/50 scale-[1.02]",
+                    isMapped && "animate-mapped-glow",
+                    isSelected && side === "source" && "bg-source/10 ring-1 ring-source/30",
+                    isSelected && side === "target" && "bg-target/10 ring-1 ring-target/30",
+                )}
+                style={{ paddingLeft: `${depth * 16 + 8}px` }}
+                onClick={handleRowClick}
+                {...(side === "source" ? { ...dragAttrs, ...dragListeners } : {})}
+            >
+                {/* Expand/collapse chevron */}
+                {hasChildren ? (
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            onToggleExpand(node.id)
+                        }}
+                        className="p-0.5 hover:bg-muted/50 rounded-full shrink-0"
                     >
-                        {/* Expand/collapse chevron */}
-                        {hasChildren ? (
-                            <button
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    toggleExpand(node.id, side)
-                                }}
-                                className="p-0.5 hover:bg-muted/50 rounded-full"
-                            >
-                                <ChevronRight
-                                    className={cn(
-                                        "h-3.5 w-3.5 transition-transform duration-200",
-                                        isExpanded && "rotate-90",
-                                    )}
-                                />
-                            </button>
-                        ) : (
-                            <span className="w-4" />
-                        )}
+                        <ChevronRight
+                            className={cn(
+                                "h-3.5 w-3.5 transition-transform duration-200 text-muted-foreground",
+                                isExpanded && "rotate-90",
+                            )}
+                        />
+                    </button>
+                ) : (
+                    <span className="w-4 shrink-0" />
+                )}
 
-                        {/* Type icon */}
-                        <TypeIcon className={cn("h-4 w-4 shrink-0", iconColor)} />
+                {/* Type icon */}
+                <NodeTypeIcon type={node.type} />
 
-                        {/* Key name */}
-                        <span className="font-medium text-sm truncate">{node.key}</span>
-
-                        {/* Value preview (primitives) */}
-                        {node.value !== undefined && (
-                            <span className="text-xs text-muted-foreground truncate ml-1">
-                                : {truncateValue(node.value)}
-                            </span>
-                        )}
-
-                        {/* Unlink button (mapped nodes only) */}
-                        {isMapped && (
-                            <button
-                                onPointerDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                    e.stopPropagation()
-                                    removeMappingsForNode(node.id, side)
-                                }}
-                                className="ml-auto h-5 w-5 shrink-0 flex items-center justify-center rounded-full hover:bg-destructive/20 text-mapped transition-colors"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        )}
-                    </div>
-                </ContextMenuTrigger>
-
-                <ContextMenuContent>
-                    {/* Add Node submenu */}
-                    <ContextMenuSub>
-                        <ContextMenuSubTrigger>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Node
-                        </ContextMenuSubTrigger>
-                        <ContextMenuSubContent>
-                            {renderAddSubmenu("above")}
-                            {renderAddSubmenu("below")}
-                            {canAddInside && renderAddSubmenu("inside")}
-                        </ContextMenuSubContent>
-                    </ContextMenuSub>
-
-                    {/* Target-only: Edit Mapping */}
-                    {side === "target" && isMapped && (
-                        <>
-                            <ContextMenuSeparator />
-                            <ContextMenuItem onSelect={() => setEditModalOpen(true)}>
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Edit Mapping
-                            </ContextMenuItem>
-                        </>
+                {/* Node name */}
+                <span
+                    className={cn(
+                        "font-medium text-sm truncate flex-1",
+                        node.type === "code" && "italic text-primary/80",
                     )}
+                >
+                    {node.label ?? node.name}
+                </span>
 
-                    {/* Clear Mapping (both sides, only if mapped) */}
-                    {isMapped && (
-                        <>
-                            {!(side === "target") && <ContextMenuSeparator />}
-                            <ContextMenuItem
-                                variant="destructive"
-                                onSelect={() => removeMappingsForNode(node.id, side)}
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Clear Mapping
-                            </ContextMenuItem>
-                        </>
-                    )}
-                </ContextMenuContent>
-            </ContextMenu>
+                {/* Value preview */}
+                {node.value && (
+                    <span className="text-xs text-muted-foreground/70 truncate ml-1 max-w-[80px] hidden sm:block">
+                        : {node.value.length > 20 ? node.value.slice(0, 20) + "…" : node.value}
+                    </span>
+                )}
+
+                {/* Mapped glow dot (target only) */}
+                {isMapped && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-mapped shrink-0 ml-auto" />
+                )}
+
+                {/* Loop indicator (target only) */}
+                {hasLoopReference && <Link2 className="h-3 w-3 text-accent shrink-0 ml-1" />}
+
+                {/* Unlink button for mapped target nodes */}
+                {isMapped && (
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            clearNodeMappings(node.id)
+                        }}
+                        className={cn(
+                            "shrink-0 h-4 w-4 ml-1 rounded-full",
+                            "flex items-center justify-center",
+                            "text-muted-foreground hover:text-destructive hover:bg-destructive/10",
+                            "transition-colors",
+                        )}
+                        title="Clear mapping"
+                    >
+                        ×
+                    </button>
+                )}
+            </div>
 
             {/* Children with CSS grid transition */}
             {hasChildren && (
                 <div
                     className="grid transition-[grid-template-rows] duration-200 ease-out"
-                    style={{
-                        gridTemplateRows: isExpanded ? "1fr" : "0fr",
-                    }}
+                    style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
                 >
                     <div className="overflow-hidden">
                         {node.children!.map((child) => (
@@ -268,51 +200,15 @@ export function TreeNode({ node, side, onNodeRef }: TreeNodeProps) {
                                 node={child}
                                 side={side}
                                 onNodeRef={onNodeRef}
+                                expandedNodes={expandedNodes}
+                                onToggleExpand={onToggleExpand}
+                                selectedNodeId={selectedNodeId}
+                                depth={depth + 1}
                             />
                         ))}
                     </div>
                 </div>
             )}
-
-            {/* Add Node Dialog */}
-            <AddNodeDialog
-                open={addDialogOpen}
-                onOpenChange={setAddDialogOpen}
-                position={addPosition}
-                nodeType={addNodeType}
-                onConfirm={handleConfirmAdd}
-            />
-
-            {/* Edit Mapping Modal */}
-            {nodeMapping && (
-                <EditMappingModal
-                    open={editModalOpen}
-                    onOpenChange={setEditModalOpen}
-                    mapping={nodeMapping}
-                    onSave={updateMappingRule}
-                />
-            )}
         </div>
     )
-}
-
-function getTypeIcon(type: TreeNodeType["type"]) {
-    switch (type) {
-        case "object":
-        case "xml-element":
-            return { icon: Folder, colorClass: "text-secondary" }
-        case "array":
-            return { icon: List, colorClass: "text-accent" }
-        case "primitive":
-            return { icon: FileText, colorClass: "text-source" }
-        case "xml-attribute":
-            return { icon: AtSign, colorClass: "text-chart-5" }
-        default:
-            return { icon: Hash, colorClass: "text-muted-foreground" }
-    }
-}
-
-function truncateValue(value: string, max = 30) {
-    if (value.length <= max) return value
-    return value.slice(0, max) + "..."
 }
